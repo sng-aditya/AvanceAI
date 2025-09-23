@@ -33,3 +33,7 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# Security files
+Security_Id.csv
+*.csv
