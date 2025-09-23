@@ -34,6 +34,5 @@ Thumbs.db
 logs/
 *.log
 
-# Security files
-Security_Id.csv
-*.csv
+# Exclude other CSV files but keep Security_Id.csv
+# Security_Id.csv - Keep this file as it contains public BSE/NSE security IDs
