@@ -8,8 +8,13 @@ import DashboardLayout from './components/dashboard/DashboardLayout';
 import Dashboard from './pages/dashboard/Dashboard';
 import Positions from './pages/dashboard/Positions';
 import Orders from './pages/dashboard/Orders';
+import OrdersHistory from './pages/dashboard/OrdersHistory';
 import BasketOrders from './pages/dashboard/BasketOrders';
 import Charts from './pages/dashboard/Charts';
+import Watchlist from './pages/dashboard/Watchlist';
+import Portfolio from './pages/dashboard/Portfolio';
+import OptionChain from './pages/dashboard/OptionChain';
+import OHLCChart from './pages/dashboard/OHLCChart';
 import AuthRequired from './components/auth/AuthRequired';
 
 // AlgoTrading component
@@ -104,13 +109,17 @@ function App() {
             </AuthRequired>
           }>
             <Route index element={<Dashboard />} />
-            <Route path="paper-trading">
+            <Route path="portfolio">
+              <Route index element={<Portfolio />} />
               <Route path="positions" element={<Positions />} />
               <Route path="orders" element={<Orders />} />
               <Route path="basket-orders" element={<BasketOrders />} />
-              <Route index element={<Navigate to="positions" replace />} />
             </Route>
+            <Route path="orders" element={<OrdersHistory />} />
             <Route path="charts" element={<Charts />} />
+            <Route path="watchlist" element={<Watchlist />} />
+            <Route path="option-chain" element={<OptionChain />} />
+            <Route path="ohlc-chart" element={<OHLCChart />} />
           </Route>
         </Routes>
       </AuthProvider>

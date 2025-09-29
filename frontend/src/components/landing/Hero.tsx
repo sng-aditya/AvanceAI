@@ -5,7 +5,7 @@ import FinanceAnimation from './FinanceAnimation';
 
 const Hero: React.FC = () => {
   return (
-    <div className="relative overflow-hidden bg-gradient-to-b from-gray-50 to-gray-100 dark:from-dark-200 dark:to-dark-300 py-16 md:py-24">
+  <div className="relative overflow-hidden bg-gradient-to-b from-gray-50 via-white to-gray-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 py-16 md:py-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
           <div className="space-y-8 max-w-lg">
@@ -46,7 +46,7 @@ const Hero: React.FC = () => {
         </div>
       </div>
 
-      <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-white dark:from-dark-200 to-transparent"></div>
+      <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-white dark:from-gray-900 to-transparent"></div>
     </div>
   );
 };

@@ -80,8 +80,8 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-dark-200 flex flex-col">
-      <div className="flex-1 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+      <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <Link to="/" className="flex items-center justify-center mb-6">
             <TrendingUp className="h-10 w-10 text-primary-600 dark:text-primary-400" />
@@ -101,10 +101,10 @@ const LoginPage: React.FC = () => {
         </div>
 
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="bg-white dark:bg-dark-100 py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          <div className="card shadow-lg py-8 px-6 sm:px-8">
             {error && (
-              <div className="mb-4 p-3 rounded-md bg-error-100 dark:bg-error-900/30 border border-error-200 dark:border-error-800">
-                <p className="text-sm text-error-600 dark:text-error-400">{error}</p>
+              <div className="mb-6 rounded-lg border border-error-200 dark:border-error-800 bg-error-50/80 dark:bg-error-900/20 px-4 py-3 backdrop-blur-sm">
+                <p className="text-sm font-medium text-error-600 dark:text-error-400">{error}</p>
               </div>
             )}
 
@@ -219,7 +219,7 @@ const LoginPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary w-full py-2.5 text-sm font-medium shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

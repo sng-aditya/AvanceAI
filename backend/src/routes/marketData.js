@@ -1,10 +1,40 @@
 const express = require('express');
 const router = express.Router();
 const dhanService = require('../services/dhanService');
+const websocketService = require('../services/websocketService');
+
+// NOTE: Mock data removed intentionally; all responses now require real WebSocket or REST data.
 const authMiddleware = require('../middleware/auth');
 
 // All market data routes require authentication
 router.use(authMiddleware);
+
+// Test WebSocket connection status
+router.get('/websocket-status', async (req, res) => {
+    try {
+        const wsData = websocketService.getMarketData();
+        res.json({
+            success: true,
+            data: {
+                isConnected: websocketService.isConnected,
+                stockCount: wsData.stocks.length,
+                indicesCount: wsData.indices.length,
+                totalCacheItems: websocketService.marketData.size,
+                lastUpdate: new Date().toISOString(),
+                sampleData: {
+                    stocks: wsData.stocks.slice(0, 3),
+                    indices: wsData.indices.slice(0, 2)
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'WebSocket status check failed',
+            error: error.message
+        });
+    }
+});
 
 // Test Dhan API connection
 router.get('/test-connection', async (req, res) => {
@@ -33,23 +63,41 @@ router.get('/test-connection', async (req, res) => {
     }
 });
 
-// Get comprehensive market data (OHLC)
+// Get comprehensive market data (REAL-TIME via WebSocket)
 router.get('/live-data', async (req, res) => {
     try {
-        const result = await dhanService.getLiveMarketData();
+        // Get real-time data from WebSocket cache
+        const marketData = websocketService.getMarketData();
         
-        if (result.success) {
+        if (marketData && (marketData.stocks.length > 0 || marketData.indices.length > 0)) {
             res.json({
                 success: true,
-                data: result.data,
-                timestamp: result.timestamp
+                data: {
+                    stocks: marketData.stocks,
+                    indices: marketData.indices
+                },
+                timestamp: new Date().toISOString(),
+                source: 'websocket'
             });
         } else {
-            res.status(400).json({
-                success: false,
-                message: 'Failed to fetch market data',
-                error: result.error
-            });
+            // Fallback to API if WebSocket data not available
+            console.log('⚠️ WebSocket data not available, falling back to API');
+            const result = await dhanService.getLiveMarketData();
+            
+            if (result.success) {
+                res.json({
+                    success: true,
+                    data: result.data,
+                    timestamp: result.timestamp,
+                    source: 'api_fallback'
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: 'Failed to fetch market data',
+                    error: result.error
+                });
+            }
         }
     } catch (error) {
         res.status(500).json({
@@ -60,23 +108,58 @@ router.get('/live-data', async (req, res) => {
     }
 });
 
-// Get Last Traded Prices only
+// Get Last Traded Prices only (REAL-TIME via WebSocket)
 router.get('/ltp', async (req, res) => {
     try {
-        const result = await dhanService.getLTPData();
+        // Get real-time LTP data from WebSocket cache
+        const marketData = websocketService.getMarketData();
         
-        if (result.success) {
+        if (marketData && (marketData.stocks.length > 0 || marketData.indices.length > 0)) {
+            // Extract only LTP data
+            const ltpData = {
+                stocks: marketData.stocks.map(stock => ({
+                    symbol: stock.symbol,
+                    ltp: stock.ltp,
+                    change: stock.change,
+                    changePercent: stock.changePercent,
+                    isPositive: stock.isPositive,
+                    timestamp: stock.timestamp
+                })),
+                indices: marketData.indices.map(index => ({
+                    symbol: index.symbol,
+                    ltp: index.ltp,
+                    change: index.change,
+                    changePercent: index.changePercent,
+                    isPositive: index.isPositive,
+                    timestamp: index.timestamp
+                }))
+            };
+            
             res.json({
                 success: true,
-                data: result.data,
-                timestamp: result.timestamp
+                data: ltpData,
+                timestamp: new Date().toISOString(),
+                source: 'websocket'
             });
         } else {
-            res.status(400).json({
-                success: false,
-                message: 'Failed to fetch LTP data',
-                error: result.error
-            });
+            // Fallback to API if WebSocket data not available
+            console.log('⚠️ WebSocket LTP data not available, falling back to API');
+            const result = await dhanService.getLTPData();
+            
+            if (result.success) {
+                res.json({
+                    success: true,
+                    data: result.data,
+                    timestamp: result.timestamp,
+                    source: 'api_fallback'
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: 'Failed to fetch LTP data',
+                    error: result.error
+                });
+            }
         }
     } catch (error) {
         res.status(500).json({
@@ -87,23 +170,80 @@ router.get('/ltp', async (req, res) => {
     }
 });
 
-// Get market summary for dashboard
+// Get market summary for dashboard (REAL-TIME via WebSocket)
 router.get('/summary', async (req, res) => {
+    // Market summary endpoint
     try {
-        const result = await dhanService.getMarketSummary();
+        // Get real-time market summary from WebSocket cache
+        const marketData = websocketService.getMarketData();
+        const hasWebSocketData = websocketService.isConnected && marketData && (marketData.stocks.length > 0 || marketData.indices.length > 0);
         
-        if (result.success) {
+        if (hasWebSocketData) {
+            // Using WebSocket data for market summary
+            const stocks = marketData.stocks || [];
+            const indices = marketData.indices || [];
+            
+            const totalStocks = stocks.length;
+            const gainers = stocks.filter(stock => stock.changePercent > 0).length;
+            const losers = stocks.filter(stock => stock.changePercent < 0).length;
+            
+            const topGainer = stocks.length > 0 ? stocks.reduce((max, stock) => 
+                stock.changePercent > max.changePercent ? stock : max, 
+                stocks[0]
+            ) : null;
+            
+            const summary = {
+                summary: {
+                    totalStocks,
+                    gainers,
+                    losers,
+                    topGainer,
+                    topLoser: null
+                },
+                indices: indices.slice(0, 3),
+                topStocks: stocks.slice(0, 8),
+                timestamp: new Date().toISOString()
+            };
+            
+            res.set({
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
             res.json({
                 success: true,
-                data: result.data,
-                timestamp: result.data.timestamp
+                data: summary,
+                timestamp: summary.timestamp,
+                source: 'websocket_realtime'
             });
         } else {
-            res.status(400).json({
-                success: false,
-                message: 'Failed to fetch market summary',
-                error: result.error
-            });
+            // Only log fallback if WebSocket is supposed to be connected
+            if (websocketService.isConnected) {
+                console.log('⚠️ WebSocket connected but no market data, falling back to API');
+            } else {
+                console.log('⚠️ WebSocket not connected, using API');
+            }
+            const result = await dhanService.getMarketSummary();
+            
+            if (result.success) {
+                res.set({
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                });
+                res.json({
+                    success: true,
+                    data: result.data,
+                    timestamp: result.data.timestamp,
+                    source: 'api_fallback'
+                });
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Failed to fetch market summary',
+                    error: result.error || 'API temporarily unavailable'
+                });
+            }
         }
     } catch (error) {
         res.status(500).json({
@@ -178,12 +318,79 @@ router.get('/indices', async (req, res) => {
     }
 });
 
+// Get positions data
+router.get('/positions', async (req, res) => {
+    try {
+        const result = await dhanService.getPositions();
+        
+        if (result.success) {
+            res.set({
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
+            res.json({
+                success: true,
+                data: result.data
+            });
+        } else {
+            res.status(400).json({
+                success: false,
+                message: 'Failed to fetch positions',
+                error: result.error
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch positions',
+            error: error.message
+        });
+    }
+});
+
+// Get holdings data
+router.get('/holdings', async (req, res) => {
+    try {
+        const result = await dhanService.getHoldings();
+        
+        if (result.success) {
+            res.set({
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
+            res.json({
+                success: true,
+                data: result.data
+            });
+        } else {
+            res.status(400).json({
+                success: false,
+                message: 'Failed to fetch holdings',
+                error: result.error
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch holdings',
+            error: error.message
+        });
+    }
+});
+
 // Get account balance
 router.get('/balance', async (req, res) => {
     try {
         const result = await dhanService.checkAccountBalance();
         
         if (result.success) {
+            res.set({
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
             res.json({
                 success: true,
                 data: result.data
@@ -326,20 +533,72 @@ router.get('/orders/:orderId', async (req, res) => {
     }
 });
 
+// Test endpoint for option chain API
+router.get('/test-option-chain', async (req, res) => {
+    try {
+        console.log('Testing option chain API...');
+        const result = await dhanService.testOptionChainAPI();
+        res.json(result);
+    } catch (error) {
+        console.error('Test API error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Test failed: ' + error.message
+        });
+    }
+});
+
 // Get expiry dates for index
 router.get('/expiry/:symbol', async (req, res) => {
     try {
         const { symbol } = req.params;
         
-        const result = await dhanService.getExpiryDates(symbol.toUpperCase());
+        if (!symbol || symbol.trim() === '') {
+            return res.status(400).json({
+                success: false,
+                message: 'Symbol parameter is required'
+            });
+        }
+
+        // Fetching expiry dates
+        
+        const result = await dhanService.getExpiryDates(symbol.trim());
         
         if (result.success) {
+            // Expiry dates fetched successfully
             res.json({
                 success: true,
-                data: result.data
+                data: result.data,
+                symbol: result.symbol,
+                source: result.source || 'api'
             });
         } else {
-            res.status(400).json({
+            // Expiry fetch failed
+            
+            // Handle specific error types
+            if (result.error.includes('Unsupported symbol')) {
+                return res.status(400).json({
+                    success: false,
+                    message: result.error,
+                    supportedSymbols: ['NIFTY_50', 'BANK_NIFTY', 'FINNIFTY', 'SENSEX']
+                });
+            }
+            
+            if (result.error.includes('401') || result.error.includes('Unauthorized')) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Invalid API credentials. Please check your Dhan API tokens.'
+                });
+            }
+            
+            if (result.error.includes('429') || result.error.includes('rate limit')) {
+                return res.status(429).json({
+                    success: false,
+                    message: 'Rate limit exceeded. Please wait 3 seconds between requests.'
+                });
+            }
+            
+            return res.status(400).json({
                 success: false,
                 message: 'Failed to fetch expiry dates',
                 error: result.error
@@ -347,6 +606,7 @@ router.get('/expiry/:symbol', async (req, res) => {
         }
         
     } catch (error) {
+        // Expiry route error
         res.status(500).json({
             success: false,
             message: 'Failed to fetch expiry dates',
@@ -355,20 +615,294 @@ router.get('/expiry/:symbol', async (req, res) => {
     }
 });
 
-// Get option chain
+// Subscribe to option chain data via WebSocket
+router.post('/option-chain/subscribe', async (req, res) => {
+    try {
+        const { symbol } = req.body;
+        
+        if (!symbol) {
+            return res.status(400).json({
+                success: false,
+                message: 'Symbol is required'
+            });
+        }
+
+        // Map symbol to security ID for WebSocket subscription
+        const SYMBOL_TO_ID = {
+            'NIFTY_50': '13',
+            'BANK_NIFTY': '25',
+            'SENSEX': '51'
+        };
+
+        const securityId = SYMBOL_TO_ID[symbol.toUpperCase()];
+        if (!securityId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Unsupported symbol for WebSocket subscription',
+                supportedSymbols: Object.keys(SYMBOL_TO_ID)
+            });
+        }
+
+        // Subscribe to option chain via WebSocket
+        websocketService.subscribeToOptionChain(securityId, 'IDX_I');
+        
+        res.json({
+            success: true,
+            message: `Subscribed to option chain for ${symbol}`,
+            symbol: symbol,
+            securityId: securityId
+        });
+        
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to subscribe to option chain',
+            error: error.message
+        });
+    }
+});
+
+// Reload security cache
+router.post('/reload-security-cache', async (req, res) => {
+    try {
+        const securityLookupService = require('../services/securityLookupService');
+        securityLookupService.reloadCache();
+        
+        res.json({
+            success: true,
+            message: 'Security cache reloaded successfully'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to reload security cache',
+            error: error.message
+        });
+    }
+});
+
+// Clear WebSocket cache for clean data source switching
+router.post('/clear-websocket-cache', async (req, res) => {
+    try {
+        websocketService.strikeOHLCData.clear();
+        websocketService.optionChainData.clear();
+        
+        res.json({
+            success: true,
+            message: 'WebSocket cache cleared successfully'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to clear WebSocket cache',
+            error: error.message
+        });
+    }
+});
+
+// Get OHLC data for a specific strike (MUST be before option-chain route)
+router.get('/strike-ohlc/:symbol/:expiry/:strike/:optionType', async (req, res) => {
+    try {
+        const { symbol, expiry, strike, optionType } = req.params;
+        const { dataSource = 'websocket' } = req.query;
+        console.log(`📊 Strike OHLC Request: ${symbol} ${expiry} ${strike} ${optionType} (source: ${dataSource})`);
+        
+        if (!symbol || !expiry || !strike || !optionType) {
+            return res.status(400).json({
+                success: false,
+                message: 'All parameters (symbol, expiry, strike, optionType) are required'
+            });
+        }
+        
+        // Get security details
+        const securityResult = await dhanService.getSecurityIdFromMaster(symbol, expiry, strike, optionType);
+        
+        if (!securityResult.success) {
+            return res.status(404).json({
+                success: false,
+                message: 'Security not found in master list',
+                error: securityResult.error
+            });
+        }
+
+        let { securityId, exchangeSegment, instrument } = securityResult.data;
+        
+        // Fix exchange segment for SENSEX options
+        if (symbol.toUpperCase() === 'SENSEX' && exchangeSegment === 'NSE_FNO') {
+            exchangeSegment = 'BSE_FNO';
+        }
+        
+        // STRICT data source separation
+        if (dataSource === 'websocket') {
+            // WebSocket mode - only return WebSocket data, no API fallback
+            if (!websocketService.isConnected) {
+                return res.status(503).json({
+                    success: false,
+                    message: 'WebSocket not connected',
+                    source: 'websocket_unavailable'
+                });
+            }
+            
+            // Subscribe and get immediate data from cache
+            websocketService.subscribeToStrikeOHLC(securityId, exchangeSegment);
+            
+            // Check cache immediately (no waiting)
+            const wsData = websocketService.getStrikeOHLCData(securityId, exchangeSegment);
+            
+            if (wsData && wsData.ltp > 0) {
+                console.log(`✅ Strike OHLC Response: websocket_realtime - ${symbol} ${strike} ${optionType}`);
+                const currentTime = Date.now() / 1000;
+                return res.json({
+                    success: true,
+                    data: {
+                        timestamp: [currentTime],
+                        open: [wsData.open],
+                        high: [wsData.high],
+                        low: [wsData.low],
+                        close: [wsData.ltp],
+                        volume: [wsData.volume]
+                    },
+                    source: 'websocket_realtime',
+                    metadata: { symbol, expiry, strike, optionType, securityId, exchangeSegment }
+                });
+            } else {
+                return res.status(404).json({
+                    success: false,
+                    message: 'No WebSocket data available for this strike',
+                    source: 'websocket_no_data'
+                });
+            }
+        } else {
+            // API mode - only return historical API data
+            const today = new Date();
+            const fromDate = today.toISOString().split('T')[0];
+            const toDate = fromDate;
+            
+            const ohlcResult = await dhanService.getStrikeOHLC(securityId, exchangeSegment, instrument, fromDate, toDate);
+            
+            if (ohlcResult.success) {
+                console.log(`✅ Strike OHLC Response: api_historical - ${symbol} ${strike} ${optionType}`);
+                
+                res.json({
+                    success: true,
+                    data: ohlcResult.data,
+                    source: 'api_historical',
+                    metadata: { symbol, expiry, strike, optionType, securityId, exchangeSegment, fromDate, toDate }
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: 'Failed to fetch historical OHLC data',
+                    error: ohlcResult.error
+                });
+            }
+        }
+        
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error while fetching OHLC data',
+            error: error.message
+        });
+    }
+});
+
+// Get option chain (HYBRID: WebSocket + API fallback)
 router.get('/option-chain/:symbol/:expiry', async (req, res) => {
     try {
         const { symbol, expiry } = req.params;
         
-        const result = await dhanService.getOptionChain(symbol.toUpperCase(), expiry);
+        if (!symbol || !expiry) {
+            return res.status(400).json({
+                success: false,
+                message: 'Both symbol and expiry parameters are required'
+            });
+        }
+
+        // Fetching option chain
+        
+        // Try WebSocket first
+        const SYMBOL_TO_ID = {
+            'NIFTY_50': '13',
+            'BANK_NIFTY': '25', 
+            'SENSEX': '51'
+        };
+        
+        const securityId = SYMBOL_TO_ID[symbol.toUpperCase()];
+        if (securityId && websocketService.isConnected) {
+            // Subscribe to option chain
+            websocketService.subscribeToOptionChain(securityId, expiry);
+            
+            const wsData = websocketService.getOptionChainData(securityId, expiry);
+            if (wsData && Object.keys(wsData.oc).length > 0) {
+                // Option chain from WebSocket
+                return res.json({
+                    success: true,
+                    data: wsData,
+                    symbol: symbol,
+                    expiry: expiry,
+                    source: 'websocket_realtime',
+                    metadata: {
+                        strikeCount: Object.keys(wsData.oc).length,
+                        underlyingPrice: wsData.last_price,
+                        fetchTime: new Date().toISOString()
+                    }
+                });
+            }
+        }
+        
+        // WebSocket option chain unavailable, using REST API
+        const result = await dhanService.getOptionChain(symbol.trim(), expiry.trim());
         
         if (result.success) {
+            const strikeCount = Object.keys(result.data.oc || {}).length;
+            // Option chain fetched successfully
+            
             res.json({
                 success: true,
-                data: result.data
+                data: result.data,
+                symbol: result.symbol,
+                expiry: result.expiry,
+                source: 'rest_api',
+                metadata: {
+                    strikeCount: strikeCount,
+                    underlyingPrice: result.data.last_price,
+                    fetchTime: new Date().toISOString()
+                }
             });
         } else {
-            res.status(400).json({
+            // Option chain fetch failed
+            
+            if (result.error.includes('Invalid expiry format')) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid expiry format. Use YYYY-MM-DD format (e.g., 2024-12-26)'
+                });
+            }
+            
+            if (result.error.includes('Unsupported symbol')) {
+                return res.status(400).json({
+                    success: false,
+                    message: result.error,
+                    supportedSymbols: ['NIFTY_50', 'BANK_NIFTY', 'FINNIFTY', 'SENSEX']
+                });
+            }
+            
+            if (result.error.includes('401') || result.error.includes('Unauthorized')) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Invalid API credentials. Please check your Dhan API tokens.'
+                });
+            }
+            
+            if (result.error.includes('429') || result.error.includes('rate limit')) {
+                return res.status(429).json({
+                    success: false,
+                    message: 'Rate limit exceeded. Please wait 3 seconds between requests.'
+                });
+            }
+            
+            return res.status(400).json({
                 success: false,
                 message: 'Failed to fetch option chain',
                 error: result.error
@@ -376,6 +910,7 @@ router.get('/option-chain/:symbol/:expiry', async (req, res) => {
         }
         
     } catch (error) {
+        // Option chain route error
         res.status(500).json({
             success: false,
             message: 'Failed to fetch option chain',
@@ -383,6 +918,8 @@ router.get('/option-chain/:symbol/:expiry', async (req, res) => {
         });
     }
 });
+
+
 
 // Execute algorithm
 router.post('/algo/execute', async (req, res) => {

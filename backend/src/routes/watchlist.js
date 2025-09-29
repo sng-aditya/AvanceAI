@@ -1,97 +1,62 @@
 const express = require('express');
 const router = express.Router();
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
 const authMiddleware = require('../middleware/auth');
 const dhanService = require('../services/dhanService');
-
-const dbPath = path.join(__dirname, '../../database/auth.db');
+const Watchlist = require('../models/Watchlist');
 
 router.use(authMiddleware);
 
-// Get user's watchlist
-router.get('/', (req, res) => {
-    const db = new sqlite3.Database(dbPath);
-    
-    db.all(
-        'SELECT * FROM watchlist WHERE user_id = ? ORDER BY created_at DESC',
-        [req.user.id],
-        async (err, rows) => {
-            if (err) {
-                db.close();
-                return res.status(500).json({ success: false, error: err.message });
-            }
-            
-            // Get live prices for watchlist items
-            if (rows.length > 0) {
-                const marketData = await dhanService.getLiveMarketData();
-                if (marketData.success) {
-                    const watchlistWithPrices = rows.map(item => {
-                        // Check both stocks and indices
-                        const stock = marketData.data.stocks.find(s => s.symbol === item.symbol);
-                        const index = marketData.data.indices.find(i => i.symbol === item.symbol);
-                        const priceData = stock || index;
-                        return { ...item, ...priceData };
-                    });
-                    res.json({ success: true, data: watchlistWithPrices });
-                } else {
-                    res.json({ success: true, data: rows });
-                }
-            } else {
-                res.json({ success: true, data: [] });
-            }
-            
-            db.close();
+// GET /api/watchlist
+router.get('/', async (req, res) => {
+    try {
+        const items = await Watchlist.find({ user: req.userId }).sort({ createdAt: -1 }).lean();
+        if (!items.length) {
+            return res.json({ success: true, data: [] });
         }
-    );
+        const marketData = await dhanService.getLiveMarketData();
+        if (marketData.success) {
+            const { stocks, indices } = marketData.data;
+            const enriched = items.map(w => {
+                const match = stocks.find(s => s.symbol === w.symbol) || indices.find(i => i.symbol === w.symbol);
+                return { ...w, market: match || null };
+            });
+            return res.json({ success: true, data: enriched });
+        }
+        res.json({ success: true, data: items });
+    } catch (err) {
+        console.error('Watchlist fetch error:', err);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
 });
 
-// Add to watchlist
-router.post('/', (req, res) => {
-    const { symbol, exchange = 'NSE_EQ' } = req.body;
-    const db = new sqlite3.Database(dbPath);
-    
-    db.run(
-        'INSERT INTO watchlist (user_id, symbol, exchange) VALUES (?, ?, ?)',
-        [req.user.id, symbol.toUpperCase(), exchange],
-        function(err) {
-            if (err) {
-                db.close();
-                if (err.code === 'SQLITE_CONSTRAINT') {
-                    return res.status(400).json({ success: false, message: 'Stock already in watchlist' });
-                }
-                return res.status(500).json({ success: false, error: err.message });
-            }
-            
-            res.json({ success: true, message: 'Added to watchlist', id: this.lastID });
-            db.close();
-        }
-    );
+// POST /api/watchlist
+router.post('/', async (req, res) => {
+    try {
+        const { symbol, exchange = 'NSE_EQ' } = req.body;
+        if (!symbol) return res.status(400).json({ success: false, message: 'Symbol required' });
+        const upper = symbol.toUpperCase();
+        const existing = await Watchlist.findOne({ user: req.userId, symbol: upper });
+        if (existing) return res.status(400).json({ success: false, message: 'Already in watchlist' });
+        const created = await Watchlist.create({ user: req.userId, symbol: upper, exchange });
+        res.json({ success: true, data: created });
+    } catch (err) {
+        console.error('Watchlist add error:', err);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
 });
 
-// Remove from watchlist
-router.delete('/:symbol', (req, res) => {
-    const { symbol } = req.params;
-    const db = new sqlite3.Database(dbPath);
-    
-    db.run(
-        'DELETE FROM watchlist WHERE user_id = ? AND symbol = ?',
-        [req.user.id, symbol.toUpperCase()],
-        function(err) {
-            if (err) {
-                db.close();
-                return res.status(500).json({ success: false, error: err.message });
-            }
-            
-            if (this.changes === 0) {
-                res.status(404).json({ success: false, message: 'Stock not found in watchlist' });
-            } else {
-                res.json({ success: true, message: 'Removed from watchlist' });
-            }
-            
-            db.close();
-        }
-    );
+// DELETE /api/watchlist/:symbol
+router.delete('/:symbol', async (req, res) => {
+    try {
+        const { symbol } = req.params;
+        const upper = symbol.toUpperCase();
+        const result = await Watchlist.deleteOne({ user: req.userId, symbol: upper });
+        if (result.deletedCount === 0) return res.status(404).json({ success: false, message: 'Not found' });
+        res.json({ success: true, message: 'Removed' });
+    } catch (err) {
+        console.error('Watchlist delete error:', err);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
 });
 
 module.exports = router;

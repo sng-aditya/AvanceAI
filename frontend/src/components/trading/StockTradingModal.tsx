@@ -4,6 +4,7 @@ import { X, TrendingUp, AlertCircle } from 'lucide-react';
 interface StockTradingModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onShowOrderHistory?: () => void;
   stock: {
     symbol: string;
     ltp: number;
@@ -15,13 +16,18 @@ interface StockTradingModalProps {
     symbol: string;
     quantity: number;
     orderType: 'BUY' | 'SELL';
-    price?: number;
+    priceType: 'MARKET' | 'LIMIT';
+    limitPrice?: number;
+    exchangeSegment?: string;
+    productType?: string;
+    validity?: string;
   }) => void;
 }
 
 const StockTradingModal: React.FC<StockTradingModalProps> = ({
   isOpen,
   onClose,
+  onShowOrderHistory,
   stock,
   onOrderPlace
 }) => {
@@ -29,39 +35,60 @@ const StockTradingModal: React.FC<StockTradingModalProps> = ({
   const [orderType, setOrderType] = useState<'BUY' | 'SELL'>('BUY');
   const [priceType, setPriceType] = useState<'MARKET' | 'LIMIT'>('MARKET');
   const [limitPrice, setLimitPrice] = useState<number>(stock?.ltp || 0);
-  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [exchangeSegment, setExchangeSegment] = useState<string>('NSE_EQ');
+  const [productType, setProductType] = useState<string>('INTRADAY');
+  const [validity, setValidity] = useState<string>('DAY');
+  const [mode, setMode] = useState<'form' | 'confirm' | 'success'>('form');
+  const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
+  const [placing, setPlacing] = useState(false);
 
   if (!isOpen || !stock) return null;
 
   const totalValue = quantity * (priceType === 'MARKET' ? stock.ltp : limitPrice);
 
-  const handlePlaceOrder = () => {
-    setShowConfirmation(true);
+  const handlePlaceOrder = () => setMode('confirm');
+
+  const confirmOrder = async () => {
+    setPlacing(true);
+    try {
+      const orderPayload = {
+        symbol: stock.symbol,
+        quantity,
+        orderType,
+        priceType,
+        limitPrice: priceType === 'LIMIT' ? limitPrice : undefined,
+        exchangeSegment,
+        productType,
+        validity
+      };
+      // onOrderPlace may be async; capture result if it returns one
+      const maybeResult: any = await onOrderPlace(orderPayload as any);
+      const newId = maybeResult?.data?.orderId || maybeResult?.orderId || null;
+      setPlacedOrderId(newId);
+      setMode('success');
+    } catch (e) {
+      console.error('Order placement failed in modal:', e);
+      setMode('form');
+    } finally {
+      setPlacing(false);
+    }
   };
 
-  const confirmOrder = () => {
-    onOrderPlace({
-      symbol: stock.symbol,
-      quantity,
-      orderType,
-      price: priceType === 'LIMIT' ? limitPrice : undefined
-    });
-    setShowConfirmation(false);
-    onClose();
-    // Reset form
+  const cancelOrder = () => setMode('form');
+
+  const resetAndClose = () => {
+    setMode('form');
+    setPlacedOrderId(null);
     setQuantity(1);
     setPriceType('MARKET');
     setLimitPrice(stock.ltp);
-  };
-
-  const cancelOrder = () => {
-    setShowConfirmation(false);
+    onClose();
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-        {!showConfirmation ? (
+        {mode === 'form' && (
           <>
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
@@ -185,6 +212,51 @@ const StockTradingModal: React.FC<StockTradingModalProps> = ({
               </div>
             )}
 
+            {/* Product Type */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Product Type
+              </label>
+              <select
+                value={productType}
+                onChange={(e) => setProductType(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              >
+                <option value="INTRADAY">Intraday</option>
+                <option value="CNC">CNC (Cash & Carry)</option>
+              </select>
+            </div>
+
+            {/* Exchange Segment */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Exchange
+              </label>
+              <select
+                value={exchangeSegment}
+                onChange={(e) => setExchangeSegment(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              >
+                <option value="NSE_EQ">NSE Equity</option>
+                <option value="BSE_EQ">BSE Equity</option>
+              </select>
+            </div>
+
+            {/* Validity */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Validity
+              </label>
+              <select
+                value={validity}
+                onChange={(e) => setValidity(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              >
+                <option value="DAY">Day</option>
+                <option value="IOC">IOC (Immediate or Cancel)</option>
+              </select>
+            </div>
+
             {/* Total Value */}
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6">
               <div className="flex justify-between items-center">
@@ -209,8 +281,8 @@ const StockTradingModal: React.FC<StockTradingModalProps> = ({
               Place {orderType} Order
             </button>
           </>
-        ) : (
-          /* Confirmation Dialog */
+        )}
+        {mode === 'confirm' && (
           <>
             <div className="text-center mb-6">
               <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
@@ -244,6 +316,18 @@ const StockTradingModal: React.FC<StockTradingModalProps> = ({
                     {priceType === 'MARKET' ? 'Market Price' : `₹${limitPrice.toFixed(2)}`}
                   </span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Product:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{productType}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Exchange:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{exchangeSegment}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Validity:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{validity}</span>
+                </div>
                 <div className="flex justify-between border-t pt-2">
                   <span className="text-gray-600 dark:text-gray-400">Total:</span>
                   <span className="font-bold text-gray-900 dark:text-white">₹{totalValue.toFixed(2)}</span>
@@ -254,19 +338,49 @@ const StockTradingModal: React.FC<StockTradingModalProps> = ({
             <div className="flex space-x-3">
               <button
                 onClick={cancelOrder}
-                className="flex-1 py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                disabled={placing}
+                className="flex-1 py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
               >
-                Cancel
+                Back
               </button>
               <button
                 onClick={confirmOrder}
+                disabled={placing}
                 className={`flex-1 py-2 px-4 rounded-lg font-medium text-white ${
                   orderType === 'BUY'
                     ? 'bg-green-600 hover:bg-green-700'
                     : 'bg-red-600 hover:bg-red-700'
-                } transition-colors`}
+                } transition-colors disabled:opacity-50`}
               >
-                Confirm Order
+                {placing ? 'Placing...' : 'Confirm Order'}
+              </button>
+            </div>
+          </>
+        )}
+        {mode === 'success' && (
+          <>
+            <div className="text-center mb-6">
+              <div className="h-14 w-14 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <TrendingUp className="h-7 w-7 text-green-600 dark:text-green-400" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Order Placed</h2>
+              <p className="text-gray-600 dark:text-gray-400">Your {orderType} order for <span className="font-semibold">{stock.symbol}</span> has been submitted.</p>
+              {placedOrderId && (
+                <p className="text-xs mt-2 text-gray-500 dark:text-gray-500">Order ID: {placedOrderId}</p>
+              )}
+            </div>
+            <div className="space-y-3">
+              <button
+                onClick={() => { onShowOrderHistory?.(); resetAndClose(); }}
+                className="w-full py-2 px-4 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                View Order History
+              </button>
+              <button
+                onClick={resetAndClose}
+                className="w-full py-2 px-4 rounded-lg font-medium bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500"
+              >
+                Close
               </button>
             </div>
           </>

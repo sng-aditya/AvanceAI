@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, RefreshCw, Activity, BarChart3, Plus, ShoppingCart } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { TrendingUp, TrendingDown, RefreshCw, Activity, BarChart3, ShoppingCart } from 'lucide-react';
+
+
 import { authenticatedFetch } from '../../utils/api';
 
 interface MarketItem {
@@ -30,46 +33,15 @@ interface MarketDataProps {
 }
 
 const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToWatchlist, onStockClick }) => {
-  const [showExpiryModal, setShowExpiryModal] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState('');
-  const [expiryDates, setExpiryDates] = useState([]);
-  const [optionChain, setOptionChain] = useState(null);
+  const navigate = useNavigate();
 
-  const showExpiryDates = async (symbol) => {
-    setSelectedIndex(symbol);
-    setShowExpiryModal(true);
-    
-    try {
-      const response = await fetch(`http://localhost:5000/api/market/expiry/${symbol}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setExpiryDates(data.data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch expiry dates:', error);
-    }
-  };
 
-  const fetchOptionChain = async (expiry) => {
-    try {
-      const response = await fetch(`http://localhost:5000/api/market/option-chain/${selectedIndex}/${expiry}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setOptionChain(data.data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch option chain:', error);
-    }
-  };
   const [marketData, setMarketData] = useState<{
     summary: MarketSummary;
     indices: MarketItem[];
     topStocks: MarketItem[];
     timestamp: string;
+    source?: string;
   } | null>(null);
   
   const [loading, setLoading] = useState(true);
@@ -78,30 +50,38 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
 
   const fetchMarketData = async () => {
     try {
-      const response = await authenticatedFetch('http://localhost:5000/api/market/summary');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Please login to view market data');
+        setLoading(false);
+        return;
+      }
 
+      const response = await authenticatedFetch('/market/summary');
+      
+      if (response.status === 401) {
+        setError('Session expired - please login again');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        return;
+      }
+      
       if (!response.ok) {
-        console.warn(`Market data API returned ${response.status}, keeping last data`);
-        // Don't throw error, just keep existing data
+        setError(`Server error: ${response.status}`);
         return;
       }
 
       const result = await response.json();
       
       if (result.success) {
-        setMarketData(result.data);
+        setMarketData({...result.data, source: result.source});
         setLastUpdate(new Date());
         setError(null);
       } else {
-        console.warn('Market data API failed, keeping last data:', result.message);
-        // Keep existing data, don't show error
+        setError(result.message || 'Failed to fetch market data');
       }
-    } catch (err) {
-      console.error('Market data fetch error:', err);
-      // Only show error if we don't have any existing data
-      if (!marketData) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch market data');
-      }
+      } catch (err) {
+      setError('Connection failed - check if backend is running');
     } finally {
       setLoading(false);
     }
@@ -163,13 +143,31 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
               <Activity className="h-5 w-5 mr-2" />
               <span>Market Data Error</span>
             </div>
-            <button
-              onClick={handleRefresh}
-              className="flex items-center text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Retry
-            </button>
+            <div className="flex space-x-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await authenticatedFetch('/test');
+                    const result = await response.json();
+                    alert(`Backend Test: ${result.success ? 'OK' : 'FAIL'}\nMessage: ${result.message}`);
+                  } catch (err) {
+                    const message = err instanceof Error ? err.message : 'Unknown error';
+                    alert('Backend connection failed: ' + message);
+                  }
+                }}
+                className="flex items-center text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              >
+                <Activity className="h-4 w-4 mr-1" />
+                Test
+              </button>
+              <button
+                onClick={handleRefresh}
+                className="flex items-center text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Retry
+              </button>
+            </div>
           </div>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{error}</p>
         </div>
@@ -177,9 +175,8 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
     );
   }
 
-  if (!marketData) {
-    return null;
-  }
+  // Minimal empty fallback (no synthetic values)
+  const displayData = marketData || { summary: { totalStocks: 0, gainers: 0, losers: 0, topGainer: null, topLoser: null }, indices: [], topStocks: [], timestamp: new Date().toISOString(), source: 'no_data' };
 
   return (
     <>
@@ -192,12 +189,36 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
         </h2>
         
         <div className="flex items-center mt-4 md:mt-0 space-x-4">
-          {lastUpdate && (
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              Last updated: {lastUpdate.toLocaleTimeString()}
-              {error && <span className="ml-2 text-orange-500">(Market Closed - Showing Last Data)</span>}
-            </div>
-          )}
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            {lastUpdate ? `Last updated: ${lastUpdate.toLocaleTimeString()}` : 'No data yet'}
+            <span className="ml-2 text-blue-600 font-medium">({displayData.source || 'unknown'})</span>
+            {error && <span className="ml-2 text-orange-500">(Error: {error})</span>}
+          </div>
+          <button 
+            onClick={async () => {
+              try {
+                // Test basic connectivity first
+                const testResponse = await authenticatedFetch('/test');
+                const testResult = await testResponse.json();
+                
+                // Test auth
+                const authTest = await authenticatedFetch('/auth/me');
+                
+                // Test WebSocket status
+                const wsResponse = await authenticatedFetch('/market/websocket-status');
+                const wsResult = await wsResponse.json();
+                
+                alert(`Connection Test:\nBackend: ${testResult.success ? 'OK' : 'FAIL'}\nAuth: ${authTest.ok ? 'OK' : 'FAIL'}\nWebSocket: ${wsResult.data.isConnected ? 'Connected' : 'Disconnected'}\nData Items: ${wsResult.data.totalCacheItems}`);
+              } catch (error) {
+                const msg = (error as any)?.message || 'Unknown error';
+                alert('Connection failed: ' + msg);
+              }
+            }}
+            className="flex items-center text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+          >
+            <Activity className="h-4 w-4 mr-1" />
+            Test
+          </button>
           <button 
             onClick={handleRefresh}
             disabled={loading}
@@ -214,33 +235,33 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
         <div className="card p-4">
           <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Stocks</h3>
           <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-            {marketData.summary.totalStocks}
+            {displayData.summary.totalStocks}
           </div>
         </div>
         
         <div className="card p-4">
           <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Gainers</h3>
           <div className="mt-2 text-2xl font-bold text-green-600 dark:text-green-400">
-            {marketData.summary.gainers}
+            {displayData.summary.gainers}
           </div>
         </div>
         
         <div className="card p-4">
           <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Losers</h3>
           <div className="mt-2 text-2xl font-bold text-red-600 dark:text-red-400">
-            {marketData.summary.losers}
+            {displayData.summary.losers}
           </div>
         </div>
         
         <div className="card p-4">
           <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Top Gainer</h3>
-          {marketData.summary.topGainer ? (
+          {displayData.summary.topGainer ? (
             <div className="mt-2">
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {marketData.summary.topGainer.symbol}
+                {displayData.summary.topGainer.symbol}
               </div>
               <div className="text-xs text-green-600 dark:text-green-400">
-                +{marketData.summary.topGainer.changePercent?.toFixed(2)}%
+                +{displayData.summary.topGainer.changePercent?.toFixed(2)}%
               </div>
             </div>
           ) : (
@@ -256,7 +277,7 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
         </div>
         <div className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {marketData.indices.map((index) => (
+            {displayData.indices.map((index) => (
               <div 
                 key={index.symbol} 
                 className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -277,9 +298,19 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
                 <div className="flex space-x-2">
                   <button
                     onClick={(e) => {
-                      e.target.classList.add('animate-pulse');
-                      setTimeout(() => e.target.classList.remove('animate-pulse'), 300);
+                      (e.currentTarget as HTMLElement).classList.add('animate-pulse');
+                      setTimeout(() => (e.currentTarget as HTMLElement).classList.remove('animate-pulse'), 300);
                       addToWatchlist?.(index.symbol);
+                      // Show feedback message
+                      const notification = document.createElement('div');
+                      notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                      notification.textContent = 'Added to watchlist';
+                      document.body.appendChild(notification);
+                      setTimeout(() => {
+                        if (document.body.contains(notification)) {
+                          document.body.removeChild(notification);
+                        }
+                      }, 3000);
                     }}
                     className="flex-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-all active:scale-95"
                   >
@@ -287,13 +318,23 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
                   </button>
                   <button
                     onClick={(e) => {
-                      e.target.classList.add('animate-pulse');
-                      setTimeout(() => e.target.classList.remove('animate-pulse'), 300);
-                      showExpiryDates(index.symbol);
+                      (e.currentTarget as HTMLElement).classList.add('animate-pulse');
+                      setTimeout(() => (e.currentTarget as HTMLElement).classList.remove('animate-pulse'), 300);
+                      navigate(`/dashboard/charts?symbol=${index.symbol}`);
+                    }}
+                    className="flex-1 px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-all active:scale-95"
+                  >
+                    Chart
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      (e.currentTarget as HTMLElement).classList.add('animate-pulse');
+                      setTimeout(() => (e.currentTarget as HTMLElement).classList.remove('animate-pulse'), 300);
+                      navigate(`/dashboard/option-chain?symbol=${index.symbol}`);
                     }}
                     className="flex-1 px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-all active:scale-95"
                   >
-                    📅 Options
+                    📅 Option Chain
                   </button>
                 </div>
               </div>
@@ -319,7 +360,7 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-              {marketData.topStocks.map((stock) => (
+              {displayData.topStocks.map((stock) => (
                 <tr key={stock.symbol} className="table-row hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="table-cell font-semibold">
                     <div className="flex items-center">
@@ -347,19 +388,29 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
                     <div className="flex space-x-1 justify-end">
                       <button
                         onClick={(e) => {
-                          e.target.classList.add('animate-pulse');
-                          setTimeout(() => e.target.classList.remove('animate-pulse'), 300);
+                          (e.currentTarget as HTMLElement).classList.add('animate-pulse');
+                          setTimeout(() => (e.currentTarget as HTMLElement).classList.remove('animate-pulse'), 300);
                           window.open(`/dashboard/charts?symbol=${stock.symbol}`, '_blank');
                         }}
                         className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-all active:scale-95"
                       >
-                        Watch
+                        Chart
                       </button>
                       <button
                         onClick={(e) => {
-                          e.target.classList.add('animate-pulse');
-                          setTimeout(() => e.target.classList.remove('animate-pulse'), 300);
+                          (e.currentTarget as HTMLElement).classList.add('animate-pulse');
+                          setTimeout(() => (e.currentTarget as HTMLElement).classList.remove('animate-pulse'), 300);
                           addToWatchlist?.(stock.symbol);
+                          // Show feedback message
+                          const notification = document.createElement('div');
+                          notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                          notification.textContent = 'Added to watchlist';
+                          document.body.appendChild(notification);
+                          setTimeout(() => {
+                            if (document.body.contains(notification)) {
+                              document.body.removeChild(notification);
+                            }
+                          }, 3000);
                         }}
                         className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-all active:scale-95"
                       >
@@ -367,8 +418,8 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
                       </button>
                       <button
                         onClick={(e) => {
-                          e.target.classList.add('animate-pulse');
-                          setTimeout(() => e.target.classList.remove('animate-pulse'), 300);
+                          (e.currentTarget as HTMLElement).classList.add('animate-pulse');
+                          setTimeout(() => (e.currentTarget as HTMLElement).classList.remove('animate-pulse'), 300);
                           onStockClick?.(stock);
                         }}
                         className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-all active:scale-95"
@@ -384,188 +435,7 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
         </div>
       </div>
     </div>
-    
-    {/* Enhanced Expiry & Options Modal */}
-    {showExpiryModal && (
-      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 backdrop-blur-sm">
-        <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-6xl mx-4 h-[85vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedIndex}</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Options & Expiry Analysis</p>
-            </div>
-            <button 
-              onClick={() => setShowExpiryModal(false)} 
-              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
-            >
-              ✕
-            </button>
-          </div>
-          
-          <div className="flex-1 overflow-hidden">
-            <div className="grid grid-cols-1 lg:grid-cols-5 h-full">
-              {/* Expiry Dates Sidebar */}
-              <div className="lg:col-span-2 border-r border-gray-200 dark:border-gray-700 p-4">
-                <div className="flex items-center mb-4">
-                  <span className="text-lg font-semibold text-gray-900 dark:text-white">📅 Expiry Dates</span>
-                  <span className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full">
-                    {expiryDates.length}
-                  </span>
-                </div>
-                <div className="space-y-2 max-h-[calc(85vh-200px)] overflow-auto">
-                  {expiryDates.map((date, index) => {
-                    const dateObj = new Date(date);
-                    const today = new Date();
-                    const daysToExpiry = Math.ceil((dateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                    
-                    // Determine if it's weekly or monthly based on actual date patterns
-                    // Weekly options typically expire on Thursdays, monthly on last Thursday of month
-                    const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 4 = Thursday
-                    const isThursday = dayOfWeek === 4;
-                    const isLastThursday = isThursday && (dateObj.getDate() + 7 > new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate());
-                    
-                    // More accurate classification based on time to expiry
-                    const isWeekly = daysToExpiry <= 35 && !isLastThursday;
-                    
-                    return (
-                      <button
-                        key={index}
-                        onClick={(e) => {
-                          e.target.classList.add('animate-pulse');
-                          setTimeout(() => e.target.classList.remove('animate-pulse'), 200);
-                          fetchOptionChain(date);
-                        }}
-                        className="w-full text-left p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-600 rounded-lg hover:from-blue-50 hover:to-purple-50 dark:hover:from-blue-900/30 dark:hover:to-purple-900/30 transition-all border border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 active:scale-98"
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <div className="font-semibold text-gray-900 dark:text-white">
-                              {dateObj.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              {date}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className={`text-xs px-2 py-1 rounded-full ${
-                              isWeekly ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
-                            }`}>
-                              {isWeekly ? 'Weekly' : 'Monthly'}
-                            </div>
-                            <div className={`text-xs mt-1 ${
-                              daysToExpiry < 0 ? 'text-red-500' : daysToExpiry <= 7 ? 'text-orange-500' : 'text-gray-500 dark:text-gray-400'
-                            }`}>
-                              {daysToExpiry < 0 ? `${Math.abs(daysToExpiry)}d ago` : `${daysToExpiry}d`}
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              
-              {/* Option Chain */}
-              <div className="lg:col-span-3 p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-lg font-semibold text-gray-900 dark:text-white">📊 Option Chain</span>
-                  {optionChain && (
-                    <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-sm rounded-full">
-                      Live Data
-                    </span>
-                  )}
-                </div>
-                
-                {optionChain ? (
-                  <div className="space-y-3 max-h-[calc(85vh-200px)] overflow-auto">
-                    {/* Show underlying price */}
-                    {optionChain.underlying_price && (
-                      <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-700 mb-4">
-                        <div className="text-center">
-                          <span className="text-sm text-blue-600 dark:text-blue-400">Underlying Price</span>
-                          <div className="text-xl font-bold text-blue-800 dark:text-blue-300">
-                            ₹{optionChain.underlying_price?.toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {Object.entries(optionChain.option_chain || optionChain).slice(0, 15).map(([strike, data]) => (
-                      <div key={strike} className="bg-gradient-to-r from-gray-50 to-white dark:from-gray-700 dark:to-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600 hover:shadow-md transition-all">
-                        <div className="text-center mb-3">
-                          <span className="text-lg font-bold text-gray-900 dark:text-white bg-yellow-100 dark:bg-yellow-900 px-3 py-1 rounded-full">
-                            ₹{parseFloat(strike).toFixed(0)}
-                          </span>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* CALL Option */}
-                          <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 p-3 rounded-lg border border-green-200 dark:border-green-700">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-bold text-green-800 dark:text-green-300">📈 CALL</span>
-                              <span className="text-xs bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 px-2 py-1 rounded">
-                                CE
-                              </span>
-                            </div>
-                            <div className="space-y-1 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">LTP:</span>
-                                <span className="font-semibold text-green-700 dark:text-green-300">
-                                  ₹{data.ce?.last_price?.toFixed(2) || 'N/A'}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">OI:</span>
-                                <span className="font-medium">{data.ce?.oi?.toLocaleString() || 'N/A'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Vol:</span>
-                                <span className="font-medium">{data.ce?.volume?.toLocaleString() || 'N/A'}</span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* PUT Option */}
-                          <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-800/30 p-3 rounded-lg border border-red-200 dark:border-red-700">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-bold text-red-800 dark:text-red-300">📉 PUT</span>
-                              <span className="text-xs bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200 px-2 py-1 rounded">
-                                PE
-                              </span>
-                            </div>
-                            <div className="space-y-1 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">LTP:</span>
-                                <span className="font-semibold text-red-700 dark:text-red-300">
-                                  ₹{data.pe?.last_price?.toFixed(2) || 'N/A'}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">OI:</span>
-                                <span className="font-medium">{data.pe?.oi?.toLocaleString() || 'N/A'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Vol:</span>
-                                <span className="font-medium">{data.pe?.volume?.toLocaleString() || 'N/A'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
-                    <div className="text-6xl mb-4">📅</div>
-                    <p className="text-lg font-medium">Select an expiry date</p>
-                    <p className="text-sm">Choose from the expiry dates to view option chain</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
+
     </>
   );
 };

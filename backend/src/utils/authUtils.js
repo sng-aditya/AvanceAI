@@ -1,29 +1,26 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+// Force 3 hour expiry unless overridden explicitly
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '3h';
+
+function getSessionExpiryDate() {
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + 3); // 3 hours session validity
+  return expiresAt;
+}
 
 module.exports = {
-  hashPassword: async (password) => {
-    return await bcrypt.hash(password, 12);
+  hashPassword: async (password) => bcrypt.hash(password, 12),
+  comparePassword: async (candidatePassword, hash) => bcrypt.compare(candidatePassword, hash),
+  generateToken: (payload, options = {}) => {
+    const jti = uuidv4();
+    // Only embed jti in payload; don't also pass jwtid option to avoid duplication error
+    const token = jwt.sign({ ...payload, jti }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN, ...options });
+    return { token, jti };
   },
-
-  comparePassword: async (candidatePassword, hash) => {
-    return await bcrypt.compare(candidatePassword, hash);
-  },
-
-  generateToken: (payload) => {
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-  },
-
-  verifyToken: (token) => {
-    return jwt.verify(token, JWT_SECRET);
-  },
-
-  getTokenExpiry: () => {
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 1);
-    return expiresAt;
-  }
+  verifyToken: (token) => jwt.verify(token, JWT_SECRET),
+  getSessionExpiryDate,
 };

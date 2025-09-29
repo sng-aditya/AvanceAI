@@ -1,5 +1,5 @@
 const { User, Session } = require('../models');
-const { generateToken } = require('../utils/authUtils');
+const { hashPassword, comparePassword, generateToken, getSessionExpiryDate } = require('../utils/authUtils');
 
 module.exports = {
   register: async (req, res, next) => {
@@ -7,28 +7,25 @@ module.exports = {
       const { email, password, first_name, last_name } = req.body;
 
       // Check if user exists
-      const existingUser = await User.findByEmail(email);
+      const existingUser = await User.findOne({ email });
       if (existingUser) {
         return res.status(400).json({ message: 'Email already in use' });
       }
+      const passwordHash = await hashPassword(password);
+      const user = await User.create({ email, passwordHash, first_name, last_name });
 
-      // Create user
-      const user = await User.create({ email, password, first_name, last_name });
-
-      // Generate token
-      const token = generateToken({ id: user.id });
-
-      // Create session
-      await Session.create(user.id, token, req);
+      const { token, jti } = generateToken({ id: user._id.toString() });
+      await Session.create({
+        user: user._id,
+        jti,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        expiresAt: getSessionExpiryDate()
+      });
 
       res.status(201).json({
         token,
-        user: {
-          id: user.id,
-          email: user.email,
-          first_name: user.first_name,
-          last_name: user.last_name
-        }
+        user: user.toPublic()
       });
     } catch (err) {
       next(err);
@@ -40,32 +37,24 @@ module.exports = {
       const { email, password } = req.body;
 
       // Find user
-      const user = await User.findByEmail(email);
+      const user = await User.findOne({ email });
       if (!user) {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
-
-      // Verify password
-      const isMatch = await User.verifyPassword(user.id, password);
+      const isMatch = await comparePassword(password, user.passwordHash);
       if (!isMatch) {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
-
-      // Generate token
-      const token = generateToken({ id: user.id });
-
-      // Create session
-      await Session.create(user.id, token, req);
-
-      res.json({
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          first_name: user.first_name,
-          last_name: user.last_name
-        }
+      const { token, jti } = generateToken({ id: user._id.toString() });
+      await Session.create({
+        user: user._id,
+        jti,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        expiresAt: getSessionExpiryDate()
       });
+
+      res.json({ token, user: user.toPublic() });
     } catch (err) {
       next(err);
     }
@@ -73,12 +62,15 @@ module.exports = {
 
   logout: async (req, res, next) => {
     try {
-      const token = req.headers.authorization?.split(' ')[1];
-      if (!token) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ message: 'No token provided' });
       }
-
-      await Session.delete(token);
+      const token = authHeader.split(' ')[1];
+      const decoded = require('jsonwebtoken').verify(token, process.env.JWT_SECRET || 'dev-secret-change-me');
+      if (decoded.jti) {
+        await Session.findOneAndUpdate({ jti: decoded.jti }, { revoked: true });
+      }
       res.json({ message: 'Logged out successfully' });
     } catch (err) {
       next(err);
@@ -88,10 +80,8 @@ module.exports = {
   me: async (req, res, next) => {
     try {
       const user = await User.findById(req.userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-      res.json(user);
+      if (!user) return res.status(404).json({ message: 'User not found' });
+      res.json(user.toPublic());
     } catch (err) {
       next(err);
     }

@@ -1,0 +1,27 @@
+{
+  "name": "trading-platform",
+  "version": "1.0.0",
+  "description": "AI-Powered Trading Platform - Full Stack",
+  "main": "backend/src/app.js",
+  "engines": {
+    "node": "18.x"
+  },
+  "scripts": {
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev",
+    "build": "cd backend && npm install",
+    "install-backend": "cd backend && npm install",
+    "install-frontend": "cd frontend && npm install",
+    "install-all": "npm run install-backend && npm run install-frontend"
+  },
+  "keywords": [
+    "trading",
+    "fintech",
+    "websocket",
+    "mongodb",
+    "react",
+    "express"
+  ],
+  "author": "AvanceAI",
+  "license": "MIT"
+}

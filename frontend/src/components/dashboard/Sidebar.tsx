@@ -6,7 +6,8 @@ import {
   LineChart, 
   ChevronDown,
   FileStack,
-  Code
+  Code,
+  ShoppingCart
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -64,7 +65,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
 const Sidebar: React.FC = () => {
   const location = useLocation();
   const { logout } = useAuth();
-  const [expandedMenu, setExpandedMenu] = useState<string | null>('paperTrading'); // Default expanded
+  const [expandedMenu, setExpandedMenu] = useState<string | null>('portfolio'); // Default expanded
 
   const toggleMenu = (menu: string) => {
     setExpandedMenu(prev => prev === menu ? null : menu);
@@ -109,18 +110,18 @@ const Sidebar: React.FC = () => {
         />
         
         <SidebarItem
-          to="/dashboard/paper-trading"
+          to="/dashboard/portfolio"
           icon={<FileStack size={20} />}
-          label="Paper Trading"
-          isActive={isActive('/dashboard/paper-trading')}
+          label="Portfolio"
+          isActive={isActive('/dashboard/portfolio')}
           hasSubMenu={true}
-          isExpanded={expandedMenu === 'paperTrading'}
-          onClick={(e) => handleParentClick(e, 'paperTrading')}
+          isExpanded={expandedMenu === 'portfolio'}
+          onClick={(e) => handleParentClick(e, 'portfolio')}
         >
           <Link
-            to="/dashboard/paper-trading/positions"
+            to="/dashboard/portfolio/positions"
             className={`block py-2 pl-3 rounded-md text-sm ${
-              isActive('/dashboard/paper-trading/positions') 
+              isActive('/dashboard/portfolio/positions') 
                 ? 'text-primary-600 dark:text-primary-400 font-medium' 
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
@@ -128,9 +129,9 @@ const Sidebar: React.FC = () => {
             Positions
           </Link>
           <Link
-            to="/dashboard/paper-trading/orders"
+            to="/dashboard/portfolio/orders"
             className={`block py-2 pl-3 rounded-md text-sm ${
-              isActive('/dashboard/paper-trading/orders') 
+              isActive('/dashboard/portfolio/orders') 
                 ? 'text-primary-600 dark:text-primary-400 font-medium' 
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
@@ -138,9 +139,9 @@ const Sidebar: React.FC = () => {
             Orders
           </Link>
           <Link
-            to="/dashboard/paper-trading/basket-orders"
+            to="/dashboard/portfolio/basket-orders"
             className={`block py-2 pl-3 rounded-md text-sm ${
-              isActive('/dashboard/paper-trading/basket-orders') 
+              isActive('/dashboard/portfolio/basket-orders') 
                 ? 'text-primary-600 dark:text-primary-400 font-medium' 
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
@@ -148,6 +149,13 @@ const Sidebar: React.FC = () => {
             Basket Orders
           </Link>
         </SidebarItem>
+        
+        <SidebarItem
+          to="/dashboard/orders"
+          icon={<ShoppingCart size={20} />}
+          label="Orders"
+          isActive={isActive('/dashboard/orders')}
+        />
         
         <SidebarItem
           to="/dashboard/charts"

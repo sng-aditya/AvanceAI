@@ -18,7 +18,7 @@ const TopBar: React.FC = () => {
   };
 
   return (
-    <header className="bg-white dark:bg-dark-100 border-b border-gray-200 dark:border-gray-800 shadow-sm z-10">
+    <header className="sticky top-0 bg-white dark:bg-dark-100 border-b border-gray-200 dark:border-gray-800 shadow-sm z-50">
       <div className="px-4 sm:px-6 py-4">
         <div className="flex justify-between items-center">
           {/* Mobile menu button */}
@@ -33,17 +33,22 @@ const TopBar: React.FC = () => {
           
           {/* Logo */}
           <div className="flex items-center">
-            <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">InvestAI</span>
+            <a href="/dashboard" className="flex items-center">
+              <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">InvestAI</span>
+            </a>
           </div>
 
           {/* Navigation Menu */}
           <div className="hidden md:flex items-center space-x-6 ml-8">
             <a href="/dashboard" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">
-              Dashboard
+              Home
             </a>
-            <a href="/dashboard/paper-trading/positions" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">
-              Paper Trading
+            <a href="/dashboard/watchlist" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">
+              Watchlist
+            </a>
+            <a href="/dashboard/portfolio" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">
+              Portfolio
             </a>
             <a href="/dashboard/charts" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">
               Charts
@@ -84,7 +89,7 @@ const TopBar: React.FC = () => {
               
               {/* Dropdown menu */}
               {profileOpen && (
-                <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-dark-100 ring-1 ring-black ring-opacity-5">
+                <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-dark-100 ring-1 ring-black ring-opacity-5 z-50">
                   <div className="py-1" role="menu" aria-orientation="vertical" aria-labelledby="user-menu-button">
                     {user && (
                       <div className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
@@ -116,8 +121,11 @@ const TopBar: React.FC = () => {
             <a href="/dashboard" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400">
               Dashboard
             </a>
-            <a href="/dashboard/paper-trading/positions" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400">
-              Paper Trading
+            <a href="/dashboard/watchlist" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400">
+              Watchlist
+            </a>
+            <a href="/dashboard/portfolio" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400">
+              Portfolio
             </a>
             <a href="/dashboard/charts" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400">
               Charts

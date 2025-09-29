@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Stop, Code, Save, Upload, Download, AlertCircle, CheckCircle } from 'lucide-react';
+import { Play, Square, Code, Save, Download, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface Algorithm {
   id: string;
@@ -178,7 +178,7 @@ def trading_strategy(market_data):
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Algorithmic Trading</h1>
         <div className="flex items-center space-x-2">
@@ -192,9 +192,9 @@ def trading_strategy(market_data):
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Algorithm Editor */}
-        <div className="card p-6">
+        <div className="card p-4">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Algorithm Editor</h2>
           
           <div className="space-y-4">
@@ -288,7 +288,7 @@ def trading_strategy(market_data):
                         }`}
                         title={algo.isActive ? 'Stop' : 'Start'}
                       >
-                        {algo.isActive ? <Stop className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                        {algo.isActive ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                       </button>
                       
                       <button
@@ -297,7 +297,7 @@ def trading_strategy(market_data):
                         className="p-1 text-blue-600 hover:text-blue-700 disabled:opacity-50"
                         title="Run once"
                       >
-                        <Play className="h-4 w-4" />
+                        <Square className="h-4 w-4" />
                       </button>
                       
                       <button
