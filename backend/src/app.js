@@ -8,72 +8,23 @@ const { connectDB } = require('./config/db');
 const app = express();
 
 // Middleware
-// Enhanced CORS configuration for mobile compatibility
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174,https://avanceai.netlify.app';
+// Configurable CORS origin(s)
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174';
 const allowedOrigins = new Set(CORS_ORIGIN.split(',').map(s => s.trim()));
-
-// Add Netlify domain explicitly for production
-allowedOrigins.add('https://avanceai.netlify.app');
-
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
-    
-    // Allow all Netlify preview deployments
-    if (origin && origin.includes('netlify.app')) {
-      return callback(null, true);
-    }
-    
+    if (!origin) return callback(null, true); // allow server-to-server / curl
     if (allowedOrigins.has(origin)) return callback(null, true);
-    
-    console.warn(`CORS blocked for origin: ${origin}`);
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true,
-  optionsSuccessStatus: 200, // For legacy browser support
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-    'User-Agent',
-    'DNT',
-    'Cache-Control',
-    'X-Mx-ReqToken',
-    'Keep-Alive',
-    'X-Csrf-Token'
-  ],
-  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
-// Handle preflight requests for mobile browsers
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin,User-Agent');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
-  res.sendStatus(200);
-});
-
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  crossOriginEmbedderPolicy: false
-}));
+app.use(helmet());
 app.use(morgan('combined'));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Add middleware to set security headers for mobile compatibility
-app.use((req, res, next) => {
-  res.header('X-Content-Type-Options', 'nosniff');
-  res.header('X-Frame-Options', 'DENY');
-  res.header('X-XSS-Protection', '1; mode=block');
-  next();
-});
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));

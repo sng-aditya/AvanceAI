@@ -1,10 +1,4 @@
-import { createFetchOptions, handleFetchError } from './mobileApi';
-
-// Production API URL for Railway backend
-const API_BASE_URL = import.meta.env.VITE_API_URL || 
-  (import.meta.env.PROD 
-    ? 'https://avanceai-production.up.railway.app' 
-    : 'http://localhost:5000');
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export interface LoginData {
   email: string;
@@ -31,35 +25,39 @@ export interface AuthResponse {
 }
 
 export async function login(data: LoginData): Promise<AuthResponse> {
-  try {
-    const options = createFetchOptions('POST', data);
-    const response = await fetch(`${API_BASE_URL}/api/auth/login`, options);
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+    credentials: 'include'
+  });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Network error' }));
-      throw new Error(error.message || `HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    handleFetchError(error, 'Login');
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Login failed');
   }
+
+  return await response.json();
 }
 
 export async function register(data: RegisterData): Promise<AuthResponse> {
-  try {
-    const options = createFetchOptions('POST', data);
-    const response = await fetch(`${API_BASE_URL}/api/auth/register`, options);
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+    credentials: 'include'
+  });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Network error' }));
-      throw new Error(error.message || `HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    handleFetchError(error, 'Registration');
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Registration failed');
   }
+
+  return await response.json();
 }
 
 export async function getCurrentUser(token: string): Promise<User> {
@@ -223,4 +221,25 @@ export async function addWatchlistSymbol(symbol: string, exchange: string = 'NSE
 export async function removeWatchlistSymbol(symbol: string): Promise<any> {
   const res = await authenticatedFetch(`/watchlist/${symbol}`, { method: 'DELETE' });
   return res.json();
+}
+
+// Market data functions
+export async function getAccountBalance(): Promise<any> {
+  const response = await authenticatedFetch('/market/balance');
+  return await response.json();
+}
+
+export async function getPositions(): Promise<any> {
+  const response = await authenticatedFetch('/market/positions');  
+  return await response.json();
+}
+
+export async function getHoldings(): Promise<any> {
+  const response = await authenticatedFetch('/market/holdings');
+  return await response.json();
+}
+
+export async function getMarketSummary(): Promise<any> {
+  const response = await authenticatedFetch('/market/summary');
+  return await response.json();
 }

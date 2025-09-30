@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, IndianRupee, AlertCircle } from 'lucide-react';
+import { authenticatedFetch } from '../../utils/api';
 
 interface Position {
   tradingSymbol: string;
@@ -24,14 +25,7 @@ const Positions: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/market/positions', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
+      const response = await authenticatedFetch('/market/positions');
       const data = await response.json();
       
       if (data.success) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, AlertCircle } from 'lucide-react';
+import { authenticatedFetch } from '../../utils/api';
 
 interface Holding {
   exchange: string;
@@ -29,14 +30,7 @@ const Holdings: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/market/holdings', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
+      const response = await authenticatedFetch('/market/holdings');
       const data = await response.json();
       
       if (data.success) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Wallet, ShoppingCart, History } from 'lucide-react';
 import OrderHistory from '../../components/trading/OrderHistory';
+import { authenticatedFetch } from '../../utils/api';
 
 interface BalanceData {
   availabelBalance: number;
@@ -38,9 +39,7 @@ const Portfolio: React.FC = () => {
   const fetchBalance = async (forced = false) => {
     if (!forced && !canFetch('balance')) return;
     try {
-      const response = await fetch('http://localhost:5000/api/market/balance', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
+      const response = await authenticatedFetch('/market/balance');
       const data = await response.json();
       if (data.success) {
         setBalance(data.data);
@@ -53,9 +52,7 @@ const Portfolio: React.FC = () => {
   const fetchPositions = async (forced = false) => {
     if (!forced && !canFetch('positions')) return;
     try {
-      const response = await fetch('http://localhost:5000/api/market/positions', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
+      const response = await authenticatedFetch('/market/positions');
       const data = await response.json();
       if (data.success) {
         setPositions(data.data || []);
@@ -72,9 +69,7 @@ const Portfolio: React.FC = () => {
   const fetchHoldings = async (forced = false) => {
     if (!forced && !canFetch('holdings')) return;
     try {
-      const response = await fetch('http://localhost:5000/api/market/holdings', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
+      const response = await authenticatedFetch('/market/holdings');
       const data = await response.json();
       if (data.success) {
         setHoldings(data.data || []);

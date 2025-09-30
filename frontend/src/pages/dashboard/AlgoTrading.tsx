@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Square, Code, Save, Download, AlertCircle, CheckCircle } from 'lucide-react';
+import { authenticatedFetch } from '../../utils/api';
 
 interface Algorithm {
   id: string;
@@ -115,12 +116,8 @@ def trading_strategy(market_data):
     
     try {
       // Simulate algorithm execution
-      const response = await fetch('http://localhost:5000/api/algo/execute', {
+      const response = await authenticatedFetch('/algo/execute', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify({
           algorithmId: algo.id,
           code: algo.code,
