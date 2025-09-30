@@ -1,4 +1,10 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { createFetchOptions, handleFetchError } from './mobileApi';
+
+// Production API URL for Railway backend
+const API_BASE_URL = import.meta.env.VITE_API_URL || 
+  (import.meta.env.PROD 
+    ? 'https://avanceai-production.up.railway.app' 
+    : 'http://localhost:5000');
 
 export interface LoginData {
   email: string;
@@ -25,39 +31,35 @@ export interface AuthResponse {
 }
 
 export async function login(data: LoginData): Promise<AuthResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-    credentials: 'include'
-  });
+  try {
+    const options = createFetchOptions('POST', data);
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, options);
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Login failed');
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Network error' }));
+      throw new Error(error.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    handleFetchError(error, 'Login');
   }
-
-  return await response.json();
 }
 
 export async function register(data: RegisterData): Promise<AuthResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-    credentials: 'include'
-  });
+  try {
+    const options = createFetchOptions('POST', data);
+    const response = await fetch(`${API_BASE_URL}/api/auth/register`, options);
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Registration failed');
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Network error' }));
+      throw new Error(error.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    handleFetchError(error, 'Registration');
   }
-
-  return await response.json();
 }
 
 export async function getCurrentUser(token: string): Promise<User> {

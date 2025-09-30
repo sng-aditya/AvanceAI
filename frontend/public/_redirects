@@ -1,5 +1,5 @@
 # API proxy to Railway backend
-/api/* https://your-railway-app.railway.app/api/:splat 200
+/api/* https://avanceai-production.up.railway.app/
 
 # SPA fallback
 /* /index.html 200
