@@ -51,26 +51,40 @@ class SecurityLookupService {
         // Map option types to CSV format
         const csvOptionType = optionType === 'CE' ? 'CALL' : 'PUT';
         
-        // Format expiry date to match CSV format (e.g., "23 SEP")
+        // Format expiry date to match CSV format (e.g., "07 OCT")
         const expiryDate = new Date(expiry);
-        const day = expiryDate.getDate();
+        const day = expiryDate.getDate().toString().padStart(2, '0');
         const month = expiryDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
         const formattedExpiry = `${day} ${month}`;
         
         const searchPattern = `${csvSymbol} ${formattedExpiry} ${strike} ${csvOptionType}`;
+        
+        console.log(`🔍 Security Lookup Details:`);
+        console.log(`  Original: ${symbol} ${expiry} ${strike} ${optionType}`);
+        console.log(`  Mapped: ${csvSymbol} ${formattedExpiry} ${strike} ${csvOptionType}`);
+        console.log(`  Search Pattern: "${searchPattern}"`);
 
         if (this.cache.has(searchPattern)) {
+            const securityId = this.cache.get(searchPattern);
+            console.log(`✅ Found security: ${searchPattern} -> ${securityId}`);
             return {
                 success: true,
                 data: {
-                    securityId: this.cache.get(searchPattern),
+                    securityId: securityId,
                     displayName: searchPattern,
-                    exchangeSegment: 'NSE_FNO',
+                    exchangeSegment: csvSymbol === 'SENSEX' ? 'BSE_FNO' : 'NSE_FNO',
                     instrument: 'OPTIDX'
                 }
             };
         }
 
+        // Debug: Show similar entries in cache
+        const similarEntries = Array.from(this.cache.keys())
+            .filter(key => key.includes(csvSymbol) && key.includes(strike))
+            .slice(0, 5);
+        
+        console.log(`❌ Security not found: "${searchPattern}"`);
+        console.log(`📝 Similar entries found:`, similarEntries);
         return {
             success: false,
             error: `Security not found for ${searchPattern}`

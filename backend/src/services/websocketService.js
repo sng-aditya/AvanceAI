@@ -101,11 +101,12 @@ class DhanWebSocketService extends EventEmitter {
     }
 
     subscribeToStrikeOHLC(securityId, exchangeSegment) {
+        // Use string format like the working test - this is the key!
         const subscriptionMessage = {
-            RequestCode: 17, // Quote data (OHLC)
+            RequestCode: 17, // Quote data (this is what works)
             InstrumentCount: 1,
             InstrumentList: [{
-                ExchangeSegment: exchangeSegment,
+                ExchangeSegment: exchangeSegment, // Use string format: "NSE_FNO", "BSE_FNO"
                 SecurityId: securityId.toString()
             }]
         };
@@ -114,37 +115,54 @@ class DhanWebSocketService extends EventEmitter {
         console.log(`📈 Subscribed to strike OHLC: ${securityId} (${exchangeSegment})`);
     }
 
+
     handleBinaryMessage(binaryData) {
         try {
             if (binaryData.length < 8) return;
 
-            const header = {
-                feedResponseCode: binaryData.readUInt8(0),
-                exchangeSegment: binaryData.readUInt16LE(1),
-                reserved: binaryData.readUInt8(3),
-                securityId: binaryData.readUInt32LE(4)
-            };
+            const responseCode = binaryData.readUInt8(0);
+            
+            // Parse according to working test format
+            if (responseCode === 4 && binaryData.length >= 50) {
+                // Quote data - use the working parsing format
+                const messageLength = binaryData.readUInt16LE(1);
+                const exchangeSegment = binaryData.readUInt8(3);
+                const securityId = binaryData.readUInt32LE(4);
+                
+                const header = {
+                    feedResponseCode: responseCode,
+                    exchangeSegment: exchangeSegment,
+                    securityId: securityId
+                };
+                
+                this.handleQuotePacket(binaryData, header);
+            } else {
+                // Other message types - use original parsing
+                const exchangeSegment = binaryData.readUInt8(1);
+                const securityId = binaryData.readUInt32LE(4);
+                
+                const header = {
+                    feedResponseCode: responseCode,
+                    exchangeSegment: exchangeSegment,
+                    securityId: securityId
+                };
 
-
-
-            switch (header.feedResponseCode) {
-                case 2: // Ticker packet
-                    this.handleTickerPacket(binaryData, header);
-                    break;
-                case 4: // Quote data (OHLC)
-                    this.handleQuotePacket(binaryData, header);
-                    break;
-                case 6: // Previous close data
-                    this.handlePrevClosePacket(binaryData, header);
-                    break;
-                case 5: // OI data
-                    this.handleOIDataPacket(binaryData, header);
-                    break;
-                case 7: // Option chain data
-                    this.handleOptionChainPacket(binaryData, header);
-                    break;
-                default:
-                    console.log(`🔍 Unknown response code: ${header.feedResponseCode}`);
+                switch (responseCode) {
+                    case 2: // Ticker packet
+                        this.handleTickerPacket(binaryData, header);
+                        break;
+                    case 6: // Previous close data
+                        this.handlePrevClosePacket(binaryData, header);
+                        break;
+                    case 5: // OI data
+                        this.handleOIDataPacket(binaryData, header);
+                        break;
+                    case 7: // Option chain data
+                        this.handleOptionChainPacket(binaryData, header);
+                        break;
+                    default:
+                        console.log(`🔍 Unknown response code: ${responseCode}`);
+                }
             }
         } catch (error) {
             console.error('❌ Error parsing binary message:', error);
@@ -342,14 +360,17 @@ class DhanWebSocketService extends EventEmitter {
     }
 
     getStrikeOHLCData(securityId, exchangeSegment) {
-        // Try multiple possible keys since WebSocket uses different exchange segments
+        // Based on working test, data comes with exchange segment 2 for NSE_FNO
         const possibleKeys = [
-            `50_${securityId}`, // Actual WebSocket key format
+            `2_${securityId}`,  // NSE_FNO (working format)
             `8_${securityId}`,  // BSE_FNO
-            `2_${securityId}`,  // NSE_FNO
-            `${exchangeSegment}_${securityId}`
+            `16_${securityId}`, // Fallback
+            `1_${securityId}`,  // NSE_EQ
+            `4_${securityId}`,  // BSE_EQ
+            `0_${securityId}`,  // IDX_I
         ];
         
+        // Check OHLC data first
         for (const key of possibleKeys) {
             const data = this.strikeOHLCData.get(key);
             if (data) {
@@ -358,8 +379,28 @@ class DhanWebSocketService extends EventEmitter {
             }
         }
         
+        // Check ticker data as fallback
+        for (const key of possibleKeys) {
+            const data = this.marketData.get(key);
+            if (data && data.ltp) {
+                console.log(`✅ Found ticker data with key: ${key}, converting to OHLC format`);
+                return {
+                    securityId: data.securityId,
+                    exchangeSegment: data.exchangeSegment,
+                    ltp: data.ltp,
+                    open: data.ltp,
+                    high: data.ltp,
+                    low: data.ltp,
+                    close: data.ltp,
+                    volume: 0,
+                    timestamp: data.timestamp
+                };
+            }
+        }
+        
         console.log(`❌ No strike OHLC data found for security ${securityId}`);
-        console.log(`🔍 Available keys: [${Array.from(this.strikeOHLCData.keys()).join(', ')}]`);
+        console.log(`🔍 Available OHLC keys: [${Array.from(this.strikeOHLCData.keys()).join(', ')}]`);
+        console.log(`🔍 Available ticker keys: [${Array.from(this.marketData.keys()).join(', ')}]`);
         return null;
     }
 
@@ -367,6 +408,40 @@ class DhanWebSocketService extends EventEmitter {
         if (this.ws && this.isConnected) {
             this.ws.send(JSON.stringify(message));
         }
+    }
+
+    subscribeBinary(feedRequestCode, instruments) {
+        if (!this.ws || !this.isConnected) return;
+        
+        const numInstruments = instruments.length;
+        const messageLength = 83 + 4 + numInstruments * 21;
+        
+        // Create header
+        const header = Buffer.alloc(83);
+        header.writeInt16LE(feedRequestCode, 0);
+        header.writeInt32LE(messageLength, 2);
+        header.write(this.clientId, 6, 'utf-8');
+        
+        // Number of instruments
+        const numInstrumentsBytes = Buffer.alloc(4);
+        numInstrumentsBytes.writeInt32LE(numInstruments, 0);
+        
+        // Instrument info
+        let instrumentInfo = Buffer.alloc(0);
+        instruments.forEach(([exchangeSegment, securityId]) => {
+            const segmentBuffer = Buffer.alloc(1);
+            segmentBuffer.writeUInt8(exchangeSegment, 0);
+            const securityIdBuffer = Buffer.alloc(20);
+            securityIdBuffer.write(securityId, 0, 'utf-8');
+            instrumentInfo = Buffer.concat([instrumentInfo, segmentBuffer, securityIdBuffer]);
+        });
+        
+        // Padding for remaining slots (up to 100 instruments)
+        const padding = Buffer.alloc((100 - numInstruments) * 21);
+        instrumentInfo = Buffer.concat([instrumentInfo, padding]);
+        
+        const subscriptionPacket = Buffer.concat([header, numInstrumentsBytes, instrumentInfo]);
+        this.ws.send(subscriptionPacket);
     }
 
     async subscribe(feedRequestCode, instruments) {
