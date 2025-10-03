@@ -775,9 +775,9 @@ router.get('/strike-ohlc/:symbol/:expiry/:strike/:optionType', async (req, res) 
         } else {
             // API mode - only return historical API data
             const today = new Date();
-            const yesterday = new Date(today);
-            yesterday.setDate(today.getDate() - 1);
-            const fromDate = yesterday.toISOString().split('T')[0];
+            // const yesterday = new Date(today);
+            // yesterday.setDate(today.getDate() - 1);
+            const fromDate = today.toISOString().split('T')[0];
             const toDate = today.toISOString().split('T')[0];
             
             const ohlcResult = await dhanService.getStrikeOHLC(securityId, exchangeSegment, instrument, fromDate, toDate);
