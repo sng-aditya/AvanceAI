@@ -6,7 +6,6 @@ import {
   LineChart, 
   ChevronDown,
   FileStack,
-  Code,
   ShoppingCart
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -18,7 +17,7 @@ type SidebarItemProps = {
   isActive: boolean;
   hasSubMenu?: boolean;
   isExpanded?: boolean;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent) => void;
   children?: React.ReactNode;
 };
 
@@ -158,10 +157,10 @@ const Sidebar: React.FC = () => {
         />
         
         <SidebarItem
-          to="/dashboard/charts"
+          to="/dashboard/watchlist"
           icon={<LineChart size={20} />}
-          label="Charts"
-          isActive={isActive('/dashboard/charts')}
+          label="Watchlist"
+          isActive={isActive('/dashboard/watchlist')}
         />
       </nav>
       

@@ -81,7 +81,9 @@ router.get('/live-data', async (req, res) => {
             });
         } else {
             // Fallback to API if WebSocket data not available
-            console.log('⚠️ WebSocket data not available, falling back to API');
+            if (process.env.NODE_ENV !== 'production') {
+                console.log('⚠️ WebSocket data not available, falling back to API');
+            }
             const result = await dhanService.getLiveMarketData();
             
             if (result.success) {
@@ -143,7 +145,9 @@ router.get('/ltp', async (req, res) => {
             });
         } else {
             // Fallback to API if WebSocket data not available
-            console.log('⚠️ WebSocket LTP data not available, falling back to API');
+            if (process.env.NODE_ENV !== 'production') {
+                console.log('⚠️ WebSocket LTP data not available, falling back to API');
+            }
             const result = await dhanService.getLTPData();
             
             if (result.success) {
@@ -217,11 +221,13 @@ router.get('/summary', async (req, res) => {
                 source: 'websocket_realtime'
             });
         } else {
-            // Only log fallback if WebSocket is supposed to be connected
-            if (websocketService.isConnected) {
-                console.log('⚠️ WebSocket connected but no market data, falling back to API');
-            } else {
-                console.log('⚠️ WebSocket not connected, using API');
+            // Only log fallback in development
+            if (process.env.NODE_ENV !== 'production') {
+                if (websocketService.isConnected) {
+                    console.log('⚠️ WebSocket connected but no market data, falling back to API');
+                } else {
+                    console.log('⚠️ WebSocket not connected, using API');
+                }
             }
             const result = await dhanService.getMarketSummary();
             
@@ -695,6 +701,96 @@ router.post('/clear-websocket-cache', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to clear WebSocket cache',
+            error: error.message
+        });
+    }
+});
+
+// Get OHLC data for stocks and indices (historical data)
+router.get('/stock-ohlc/:symbol', async (req, res) => {
+    try {
+        const { symbol } = req.params;
+        const { fromDate, toDate } = req.query;
+        
+        console.log(`📊 Stock/Index OHLC Request: ${symbol} from ${fromDate} to ${toDate}`);
+        
+        if (!symbol) {
+            return res.status(400).json({
+                success: false,
+                message: 'Symbol is required'
+            });
+        }
+
+        // Security ID mapping for stocks and indices
+        const securityMapping = {
+            // Indices
+            'NIFTY_50': { securityId: '13', exchangeSegment: 'IDX_I', instrument: 'INDEX' },
+            'BANK_NIFTY': { securityId: '25', exchangeSegment: 'IDX_I', instrument: 'INDEX' },
+            'SENSEX': { securityId: '51', exchangeSegment: 'IDX_I', instrument: 'INDEX' },
+            
+            // Stocks
+            'RELIANCE': { securityId: '2885', exchangeSegment: 'NSE_EQ', instrument: 'EQUITY' },
+            'TCS': { securityId: '11536', exchangeSegment: 'NSE_EQ', instrument: 'EQUITY' },
+            'HDFCBANK': { securityId: '1333', exchangeSegment: 'NSE_EQ', instrument: 'EQUITY' },
+            'INFY': { securityId: '1594', exchangeSegment: 'NSE_EQ', instrument: 'EQUITY' },
+            'WIPRO': { securityId: '3787', exchangeSegment: 'NSE_EQ', instrument: 'EQUITY' },
+            'ICICIBANK': { securityId: '4963', exchangeSegment: 'NSE_EQ', instrument: 'EQUITY' },
+            'SBIN': { securityId: '3045', exchangeSegment: 'NSE_EQ', instrument: 'EQUITY' },
+            'BHARTIARTL': { securityId: '10604', exchangeSegment: 'NSE_EQ', instrument: 'EQUITY' }
+        };
+
+        const security = securityMapping[symbol.toUpperCase()];
+        
+        if (!security) {
+            return res.status(404).json({
+                success: false,
+                message: `Security not found for symbol: ${symbol}. Available symbols: ${Object.keys(securityMapping).join(', ')}`
+            });
+        }
+
+        // Use provided dates or default to today
+        const today = new Date();
+        const finalFromDate = fromDate || today.toISOString().split('T')[0];
+        const finalToDate = toDate || today.toISOString().split('T')[0];
+        
+        // Fetch OHLC data using the same API as strike OHLC
+        const ohlcResult = await dhanService.getStrikeOHLC(
+            security.securityId, 
+            security.exchangeSegment, 
+            security.instrument, 
+            finalFromDate, 
+            finalToDate
+        );
+        
+        if (ohlcResult.success) {
+            console.log(`✅ Stock/Index OHLC Response: ${symbol} (${ohlcResult.data?.timestamp?.length || 0} candles)`);
+            
+            res.json({
+                success: true,
+                data: ohlcResult.data,
+                source: 'api_historical',
+                metadata: { 
+                    symbol, 
+                    securityId: security.securityId, 
+                    exchangeSegment: security.exchangeSegment,
+                    instrument: security.instrument,
+                    fromDate: finalFromDate, 
+                    toDate: finalToDate 
+                }
+            });
+        } else {
+            res.status(400).json({
+                success: false,
+                message: 'Failed to fetch OHLC data',
+                error: ohlcResult.error
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error fetching stock OHLC:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error while fetching OHLC data',
             error: error.message
         });
     }

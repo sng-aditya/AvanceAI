@@ -3,9 +3,11 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const Logger = require('./utils/logger');
 
 const { connectDB } = require('./config/db');
 const app = express();
+const logger = new Logger('APP');
 
 // Middleware
 // Configurable CORS origin(s)
@@ -22,7 +24,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(helmet());
-app.use(morgan('combined'));
+// Use morgan only in development
+if (process.env.NODE_ENV !== 'production') {
+  app.use(morgan('dev'));
+}
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -79,41 +84,62 @@ const PORT = process.env.PORT || 5000;
 
 connectDB()
   .then(() => {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log('\n🚀 === TRADING PLATFORM STARTUP ===');
-      console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🔑 JWT Secret: ${process.env.JWT_SECRET ? '✅ SET' : '❌ NOT SET'}`);
-      console.log(`📡 Dhan API Token: ${process.env.DHAN_ACCESS_TOKEN ? '✅ SET' : '❌ NOT SET'}`);
-      console.log(`💾 MongoDB URI: ${process.env.MONGODB_URI ? '✅ SET' : '❌ Using Default'}`);
-      console.log(`💾 Database: ✅ MongoDB Connected`);
-      console.log(`🚀 Server: ✅ Running on port ${PORT}`);
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      logger.startup('=== TRADING PLATFORM STARTUP ===');
+      logger.startup(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.startup(`JWT Secret: ${process.env.JWT_SECRET ? '✅ SET' : '❌ NOT SET'}`);
+      logger.startup(`Dhan API Token: ${process.env.DHAN_ACCESS_TOKEN ? '✅ SET' : '❌ NOT SET'}`);
+      logger.startup(`MongoDB URI: ${process.env.MONGODB_URI ? '✅ SET' : '❌ Using Default'}`);
+      logger.startup(`Database: ✅ MongoDB Connected`);
+      logger.startup(`Server: ✅ Running on port ${PORT}`);
 
       if ((process.env.NODE_ENV === 'production') && !process.env.JWT_SECRET) {
-        console.error('FATAL: JWT_SECRET is required in production.');
+        logger.error('FATAL: JWT_SECRET is required in production.');
         process.exit(1);
       }
 
       try {
         const websocketService = require('./services/websocketService');
         const securityLookupService = require('./services/securityLookupService');
-        
-        websocketService.connect();
-        console.log('⚡ WebSocket: ✅ Real-time data enabled');
+        const sessionMonitor = require('./services/sessionMonitor');
         
         // Initialize security cache
         securityLookupService.initializeCache();
-        console.log('🔍 Security Cache: ✅ Initializing...');
+        logger.startup('Security Cache: ✅ Initializing...');
+        
+        // Initialize session monitor (will manage WebSocket lifecycle)
+        sessionMonitor.initialize(websocketService);
+        logger.startup('Session Monitor: ✅ Active');
         
       } catch (error) {
-        console.log('⚠️ WebSocket: ❌ Service not available');
-        console.log('Error:', error.message);
+        logger.warn('WebSocket: ❌ Service not available', { error: error.message });
       }
       
-      console.log('=== STARTUP COMPLETE ===\n');
+      logger.startup('=== STARTUP COMPLETE ===\n');
     });
+
+    // Graceful shutdown
+    const shutdown = () => {
+      logger.info('Shutting down gracefully...');
+      const sessionMonitor = require('./services/sessionMonitor');
+      sessionMonitor.shutdown();
+      
+      server.close(() => {
+        logger.info('Server closed');
+        process.exit(0);
+      });
+      
+      // Force close after 10 seconds
+      setTimeout(() => {
+        logger.error('Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   })
   .catch((err) => {
-    console.error('❌ Database: Failed to connect');
-    console.error('Error:', err.message);
+    logger.error('Database: Failed to connect', { error: err.message });
     process.exit(1);
   });

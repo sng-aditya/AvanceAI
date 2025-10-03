@@ -154,6 +154,12 @@ const RealTimeMarketData: React.FC<MarketDataProps> = ({ addToWatchlist, onStock
                     + Watchlist
                   </button>
                   <button
+                    onClick={() => navigate(`/dashboard/stock-chart?symbol=${index.symbol}`)}
+                    className="flex-1 px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-all active:scale-95"
+                  >
+                    Chart
+                  </button>
+                  <button
                     onClick={() => navigate(`/dashboard/option-chain?symbol=${index.symbol}`)}
                     className="flex-1 px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-all active:scale-95"
                   >
@@ -204,6 +210,12 @@ const RealTimeMarketData: React.FC<MarketDataProps> = ({ addToWatchlist, onStock
                   </td>
                   <td className="table-cell text-right">
                     <div className="flex space-x-1 justify-end">
+                      <button
+                        onClick={() => navigate(`/dashboard/stock-chart?symbol=${stock.symbol}`)}
+                        className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-all active:scale-95"
+                      >
+                        Chart
+                      </button>
                       <button
                         onClick={() => addToWatchlist?.(stock.symbol)}
                         className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-all active:scale-95"

@@ -21,6 +21,11 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ message: 'Session not found or revoked' });
     }
     if (session.expiresAt < new Date()) {
+      // Mark as expired and revoke
+      await Session.updateOne(
+        { _id: session._id },
+        { $set: { revoked: true, revokedReason: 'expired' } }
+      );
       return res.status(401).json({ message: 'Session expired' });
     }
 
@@ -29,6 +34,14 @@ const authMiddleware = async (req, res, next) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+
+    // Update last activity timestamp (async, no need to wait)
+    Session.updateOne(
+      { _id: session._id },
+      { $set: { lastActivity: new Date() } }
+    ).catch(err => {
+      console.error('Failed to update session activity:', err.message);
+    });
 
     req.userId = decoded.id;
     req.user = { id: decoded.id, email: user.email };

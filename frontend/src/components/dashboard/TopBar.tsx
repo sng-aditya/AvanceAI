@@ -50,9 +50,6 @@ const TopBar: React.FC = () => {
             <a href="/dashboard/portfolio" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">
               Portfolio
             </a>
-            <a href="/dashboard/charts" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">
-              Charts
-            </a>
           </div>
 
           {/* Right navigation */}
@@ -126,9 +123,6 @@ const TopBar: React.FC = () => {
             </a>
             <a href="/dashboard/portfolio" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400">
               Portfolio
-            </a>
-            <a href="/dashboard/charts" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400">
-              Charts
             </a>
           </nav>
         </div>

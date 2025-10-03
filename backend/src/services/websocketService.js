@@ -1,5 +1,8 @@
 const WebSocket = require('ws');
 const EventEmitter = require('events');
+const Logger = require('../utils/logger');
+
+const logger = new Logger('WebSocket');
 
 class DhanWebSocketService extends EventEmitter {
     constructor() {
@@ -9,6 +12,7 @@ class DhanWebSocketService extends EventEmitter {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         this.reconnectDelay = 5000;
+        this.reconnectTimeout = null;
         this.subscriptions = new Set();
         this.marketData = new Map();
         this.optionChainData = new Map();
@@ -16,6 +20,9 @@ class DhanWebSocketService extends EventEmitter {
         
         this.accessToken = process.env.DHAN_ACCESS_TOKEN;
         this.clientId = process.env.DHAN_CLIENT_ID;
+        
+        // Memory leak prevention
+        this.setMaxListeners(20);
     }
 
     connect() {
@@ -23,11 +30,11 @@ class DhanWebSocketService extends EventEmitter {
 
         const wsUrl = `wss://api-feed.dhan.co?version=2&token=${this.accessToken}&clientId=${this.clientId}&authType=2`;
         
-        console.log('🔌 Connecting to Dhan WebSocket...');
+        logger.info('Connecting to Dhan WebSocket...');
         this.ws = new WebSocket(wsUrl);
 
         this.ws.on('open', () => {
-            console.log('✅ WebSocket connected to Dhan');
+            logger.info('WebSocket connected to Dhan');
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.subscribeToInstruments();
@@ -39,27 +46,32 @@ class DhanWebSocketService extends EventEmitter {
         });
 
         this.ws.on('close', () => {
-            console.log('🔌 WebSocket disconnected');
+            logger.info('WebSocket disconnected');
             this.isConnected = false;
             this.reconnect();
         });
 
         this.ws.on('error', (error) => {
-            console.error('❌ WebSocket error:', error);
+            logger.error('WebSocket error', { error: error.message });
             this.emit('error', error);
         });
     }
 
     reconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('❌ Max reconnection attempts reached');
+            logger.warn('Max reconnection attempts reached');
             return;
         }
 
         this.reconnectAttempts++;
-        console.log(`🔄 Reconnecting... Attempt ${this.reconnectAttempts}`);
+        logger.debug(`Reconnecting... Attempt ${this.reconnectAttempts}`);
         
-        setTimeout(() => {
+        // Clear any existing timeout
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+        }
+        
+        this.reconnectTimeout = setTimeout(() => {
             this.connect();
         }, this.reconnectDelay);
     }
@@ -86,7 +98,7 @@ class DhanWebSocketService extends EventEmitter {
         };
 
         this.send(subscriptionMessage);
-        console.log(`📡 Subscribed to ${instruments.length} instruments`);
+        logger.debug(`Subscribed to ${instruments.length} instruments`);
     }
 
     subscribeToOptionChain(underlyingId, expiry) {
@@ -97,7 +109,7 @@ class DhanWebSocketService extends EventEmitter {
         };
         
         this.send(optionChainMessage);
-        console.log(`📊 Subscribed to option chain: ${underlyingId} ${expiry}`);
+        logger.debug(`Subscribed to option chain: ${underlyingId} ${expiry}`);
     }
 
     subscribeToStrikeOHLC(securityId, exchangeSegment) {
@@ -112,7 +124,7 @@ class DhanWebSocketService extends EventEmitter {
         };
         
         this.send(subscriptionMessage);
-        console.log(`📈 Subscribed to strike OHLC: ${securityId} (${exchangeSegment})`);
+        logger.debug(`Subscribed to strike OHLC: ${securityId} (${exchangeSegment})`);
     }
 
 
@@ -161,11 +173,11 @@ class DhanWebSocketService extends EventEmitter {
                         this.handleOptionChainPacket(binaryData, header);
                         break;
                     default:
-                        console.log(`🔍 Unknown response code: ${responseCode}`);
+                        logger.debug(`Unknown response code: ${responseCode}`);
                 }
             }
         } catch (error) {
-            console.error('❌ Error parsing binary message:', error);
+            logger.error('Error parsing binary message', { error: error.message });
         }
     }
 
@@ -228,7 +240,7 @@ class DhanWebSocketService extends EventEmitter {
             this.strikeOHLCData.set(key, ohlcData);
             this.emit('strikeOHLCUpdate', ohlcData);
         } catch (error) {
-            console.error('❌ Error parsing quote packet:', error);
+            logger.error('Error parsing quote packet', { error: error.message });
         }
     }
 
@@ -324,7 +336,7 @@ class DhanWebSocketService extends EventEmitter {
             const openInterest = data.readUInt32LE(8);
             // Just log for now, can be used for OI tracking
         } catch (error) {
-            console.error('❌ Error parsing OI packet:', error);
+            logger.error('Error parsing OI packet', { error: error.message });
         }
     }
 
@@ -346,7 +358,7 @@ class DhanWebSocketService extends EventEmitter {
             
             this.optionChainData.set(key, existing);
         } catch (error) {
-            console.error('❌ Error parsing option chain packet:', error);
+            logger.error('Error parsing option chain packet', { error: error.message });
         }
     }
 
@@ -374,7 +386,7 @@ class DhanWebSocketService extends EventEmitter {
         for (const key of possibleKeys) {
             const data = this.strikeOHLCData.get(key);
             if (data) {
-                console.log(`✅ Found strike OHLC data with key: ${key}`);
+                logger.debug(`Found strike OHLC data with key: ${key}`);
                 return data;
             }
         }
@@ -383,7 +395,7 @@ class DhanWebSocketService extends EventEmitter {
         for (const key of possibleKeys) {
             const data = this.marketData.get(key);
             if (data && data.ltp) {
-                console.log(`✅ Found ticker data with key: ${key}, converting to OHLC format`);
+                logger.debug(`Found ticker data with key: ${key}, converting to OHLC format`);
                 return {
                     securityId: data.securityId,
                     exchangeSegment: data.exchangeSegment,
@@ -398,9 +410,7 @@ class DhanWebSocketService extends EventEmitter {
             }
         }
         
-        console.log(`❌ No strike OHLC data found for security ${securityId}`);
-        console.log(`🔍 Available OHLC keys: [${Array.from(this.strikeOHLCData.keys()).join(', ')}]`);
-        console.log(`🔍 Available ticker keys: [${Array.from(this.marketData.keys()).join(', ')}]`);
+        logger.debug(`No strike OHLC data found for security ${securityId}`);
         return null;
     }
 
@@ -460,8 +470,31 @@ class DhanWebSocketService extends EventEmitter {
 
     disconnect() {
         if (this.ws) {
-            this.ws.close();
+            logger.info('Disconnecting WebSocket...');
+            
+            // Clear reconnect timeout
+            if (this.reconnectTimeout) {
+                clearTimeout(this.reconnectTimeout);
+                this.reconnectTimeout = null;
+            }
+            
+            // Remove all event listeners to prevent memory leaks
+            if (this.ws) {
+                this.ws.removeAllListeners();
+                this.ws.close();
+                this.ws = null;
+            }
+            
             this.isConnected = false;
+            this.reconnectAttempts = 0;
+            
+            // Clear data caches to free memory
+            this.marketData.clear();
+            this.optionChainData.clear();
+            this.strikeOHLCData.clear();
+            this.subscriptions.clear();
+            
+            logger.info('WebSocket disconnected and cleaned up');
         }
     }
 }

@@ -69,7 +69,10 @@ module.exports = {
       const token = authHeader.split(' ')[1];
       const decoded = require('jsonwebtoken').verify(token, process.env.JWT_SECRET || 'dev-secret-change-me');
       if (decoded.jti) {
-        await Session.findOneAndUpdate({ jti: decoded.jti }, { revoked: true });
+        await Session.findOneAndUpdate(
+          { jti: decoded.jti }, 
+          { revoked: true, revokedReason: 'logout' }
+        );
       }
       res.json({ message: 'Logged out successfully' });
     } catch (err) {

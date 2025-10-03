@@ -320,7 +320,7 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
                     onClick={(e) => {
                       (e.currentTarget as HTMLElement).classList.add('animate-pulse');
                       setTimeout(() => (e.currentTarget as HTMLElement).classList.remove('animate-pulse'), 300);
-                      navigate(`/dashboard/charts?symbol=${index.symbol}`);
+                      navigate(`/dashboard/stock-chart?symbol=${index.symbol}`);
                     }}
                     className="flex-1 px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-all active:scale-95"
                   >
@@ -390,7 +390,7 @@ const MarketData: React.FC<MarketDataProps> = ({ refreshInterval = 30000, addToW
                         onClick={(e) => {
                           (e.currentTarget as HTMLElement).classList.add('animate-pulse');
                           setTimeout(() => (e.currentTarget as HTMLElement).classList.remove('animate-pulse'), 300);
-                          window.open(`/dashboard/charts?symbol=${stock.symbol}`, '_blank');
+                          navigate(`/dashboard/stock-chart?symbol=${stock.symbol}`);
                         }}
                         className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-all active:scale-95"
                       >

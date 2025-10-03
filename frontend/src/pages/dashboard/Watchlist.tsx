@@ -174,7 +174,7 @@ const Watchlist: React.FC = () => {
                     <td className="table-cell text-right">
                       <div className="flex space-x-1 justify-end">
                         <button
-                          onClick={() => window.open(`/dashboard/charts?symbol=${item.symbol}`, '_blank')}
+                          onClick={() => window.open(`/dashboard/stock-chart?symbol=${item.symbol}`, '_blank')}
                           className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-all active:scale-95"
                         >
                           Chart
@@ -260,7 +260,7 @@ const Watchlist: React.FC = () => {
                     <td className="table-cell text-right">
                       <div className="flex space-x-1 justify-end">
                         <button
-                          onClick={() => window.open(`/dashboard/charts?symbol=${item.symbol}`, '_blank')}
+                          onClick={() => window.open(`/dashboard/stock-chart?symbol=${item.symbol}`, '_blank')}
                           className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-all active:scale-95"
                         >
                           Chart

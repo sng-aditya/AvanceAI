@@ -40,9 +40,11 @@ class DhanService {
         this.lastRequestTime = 0;
         
         if (!this.accessToken || !this.clientId) {
-            console.warn('⚠️ Dhan API credentials not found in environment variables');
-            console.warn('DHAN_ACCESS_TOKEN:', this.accessToken ? 'SET' : 'NOT SET');
-            console.warn('DHAN_CLIENT_ID:', this.clientId ? 'SET' : 'NOT SET');
+            const Logger = require('../utils/logger');
+            const logger = new Logger('DhanService');
+            logger.warn('Dhan API credentials not found in environment variables');
+            logger.warn('DHAN_ACCESS_TOKEN: ' + (this.accessToken ? 'SET' : 'NOT SET'));
+            logger.warn('DHAN_CLIENT_ID: ' + (this.clientId ? 'SET' : 'NOT SET'));
         }
         
         this.headers = {
@@ -599,7 +601,9 @@ class DhanService {
         if (cacheInitialized) return;
         
         try {
-            console.log('🚀 Initializing security ID cache...');
+            const Logger = require('../utils/logger');
+            const logger = new Logger('SecurityCache');
+            logger.info('Initializing security ID cache...');
             
             // Fetch master CSV
             const response = await axios.get('https://images.dhan.co/api-data/api-scrip-master-detailed.csv');
@@ -639,10 +643,10 @@ class DhanService {
                 }
             }
             
-            console.log(`✅ Security cache initialized: ${cacheCount} securities cached`);
+            logger.info(`Security cache initialized: ${cacheCount} securities cached`);
             cacheInitialized = true;
         } catch (error) {
-            console.error('🚨 Failed to initialize security cache:', error.message);
+            logger.error('Failed to initialize security cache', { error: error.message });
         }
     }
 

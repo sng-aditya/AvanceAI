@@ -14,4 +14,15 @@ router.post('/login', validateLogin, authController.login);
 router.post('/logout', authMiddleware, authController.logout);
 router.get('/me', authMiddleware, authController.me);
 
+// Heartbeat endpoint to keep session alive
+router.post('/heartbeat', authMiddleware, (req, res) => {
+  // The auth middleware already updated lastActivity
+  res.json({ 
+    success: true,
+    sessionActive: true,
+    expiresAt: req.session.expiresAt,
+    lastActivity: req.session.lastActivity
+  });
+});
+
 module.exports = router;

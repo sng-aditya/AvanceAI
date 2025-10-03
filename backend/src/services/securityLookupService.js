@@ -1,5 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const Logger = require('../utils/logger');
+
+const logger = new Logger('SecurityLookup');
 
 class SecurityLookupService {
     constructor() {
@@ -17,7 +20,7 @@ class SecurityLookupService {
     loadCache() {
         try {
             if (!fs.existsSync(this.csvPath)) {
-                console.log('⚠️ Security_Id.csv not found, creating empty cache');
+                logger.warn('Security_Id.csv not found, creating empty cache');
                 return;
             }
 
@@ -33,9 +36,9 @@ class SecurityLookupService {
                 }
             });
 
-            console.log(`🔍 Security Cache: ✅ Loaded ${loadedCount} securities`);
+            logger.info(`Security Cache: Loaded ${loadedCount} securities`);
         } catch (error) {
-            console.error('❌ Error loading security cache:', error.message);
+            logger.error('Error loading security cache', { error: error.message });
         }
     }
 
@@ -59,14 +62,15 @@ class SecurityLookupService {
         
         const searchPattern = `${csvSymbol} ${formattedExpiry} ${strike} ${csvOptionType}`;
         
-        console.log(`🔍 Security Lookup Details:`);
-        console.log(`  Original: ${symbol} ${expiry} ${strike} ${optionType}`);
-        console.log(`  Mapped: ${csvSymbol} ${formattedExpiry} ${strike} ${csvOptionType}`);
-        console.log(`  Search Pattern: "${searchPattern}"`);
+        logger.debug('Security Lookup Details', {
+            original: `${symbol} ${expiry} ${strike} ${optionType}`,
+            mapped: `${csvSymbol} ${formattedExpiry} ${strike} ${csvOptionType}`,
+            searchPattern
+        });
 
         if (this.cache.has(searchPattern)) {
             const securityId = this.cache.get(searchPattern);
-            console.log(`✅ Found security: ${searchPattern} -> ${securityId}`);
+            logger.debug(`Found security: ${searchPattern} -> ${securityId}`);
             return {
                 success: true,
                 data: {
@@ -83,8 +87,7 @@ class SecurityLookupService {
             .filter(key => key.includes(csvSymbol) && key.includes(strike))
             .slice(0, 5);
         
-        console.log(`❌ Security not found: "${searchPattern}"`);
-        console.log(`📝 Similar entries found:`, similarEntries);
+        logger.debug(`Security not found: "${searchPattern}"`, { similarEntries });
         return {
             success: false,
             error: `Security not found for ${searchPattern}`
